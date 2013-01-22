@@ -1,1 +1,4 @@
-import scgi 
+import dawn.scgi SCGIServer;
+
+testServer := SCGIServer("/tmp/dawn-scgi.socket");
+testServer.run();
