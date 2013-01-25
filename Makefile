@@ -13,6 +13,8 @@ ifndef PREFIX
   PREFIX=$(shell ldd `which crack` | grep -e 'libCrackLang'| sed  's/.*libCrackLang.* => \(.*\)\/lib\/libCrackLang.*/\1/g')
 endif
 
+tests=test/test_scgi
+
 VERSION=$(lastword $(shell crack --version))
 
 INSTALLDIR=${PREFIX}/lib/crack-${VERSION}/dawn
