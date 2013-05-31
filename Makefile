@@ -20,11 +20,16 @@ VERSION=$(lastword $(shell crack --version))
 INSTALLDIR=${PREFIX}/lib/crack-${VERSION}/dawn
 
 
-all: test/test_scgi
+all: test/test_scgi bin/crack_scgi dawn/user.crk
 
-tests: test/test_scgi
+tests: test/test_scgi test/test_user
 
 test/test_scgi: test/test_scgi.crk dawn/scgi.crk
+test/test_user: test/test_user.crk dawn/user.crk
+bin/crack_scgi: bin/crack_scgi.crk dawn/scgi.crk
+
+dawn/user.crk: interfaces/user.whipdl
+	whipclass -i $< -l crack -s bson -o $@
 
 
 % : %.crk

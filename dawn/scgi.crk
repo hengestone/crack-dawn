@@ -53,9 +53,6 @@ class SCGIRequest {
               UnixAddress clientAddr, ## the client address.
               HashMap[String, String] headers
               ) :
-#~         method = method,
-#~         path = path,
-#~         version = version,
         clientAddr = clientAddr,
         __clt(client),
         headers = headers,
@@ -65,18 +62,15 @@ class SCGIRequest {
     ## Sends a reply to the client with the specified code, content type and 
     ## contents.
     void sendReply(int code, String contentType, String contents) {
-        __clt `HTTP/1.1 $code Stat
-Content-type: $contentType
-Content-length: $(contents.size)
-
-$contents`;
+        __clt I`HTTP/1.1 $code Stat
+                Content-type: $contentType
+                Content-length: $(contents.size)
+                $contents`;
     }
     
     void sendRedirect(int code, String location) {
-        __clt `HTTP/1.1 $code Stat
-Location: $location
-
-`;
+        __clt I`HTTP/1.1 $code Stat
+                Location: $location`;
     }
 
     void formatTo(Formatter fmt) {
@@ -120,7 +114,6 @@ String joinPath(StringArray path, int start, int end) {
     
     return String(buf, true);
 }
-        
 
 const int _ST_REQUEST = 0;
 const int _ST_HEADERS= 1;
@@ -188,9 +181,8 @@ class OutQueue : List[String] @implements Writer {
     }
 }
 
-## An HTTP Server.
+## An SCGI socket 'server'
 ##
-## TODO: make this class proactor based.
 uint bufSize = 16384;
 class SCGIServer {
     
@@ -226,7 +218,7 @@ class SCGIServer {
             request = SCGIRequest(sock, addr, headers);
             buf := data.buffer;
 
-            // parse length
+            # parse length
             for (si = 0; si < data.size && buf[si] != b':'; si++) {
                 if (buf[si] >= 0x30 && buf[si] <= 0x39)
                     len = (len*10) + (buf[si]-0x30);
@@ -240,7 +232,7 @@ class SCGIServer {
             si++;
             
             while (si < data.size) {
-                // parse key
+                # parse key
                 uint i;
                 for (i=si; i < data.size && buf[i] > 0; i++) { }
                 key := String(Buffer(buf+si, i-si));
@@ -248,22 +240,29 @@ class SCGIServer {
                     throw Exception(sfmt `Malformed header at position $i while parsing key $key`);
                 si = i+1;
 
-                // parse value
+                # parse value
                 for (i=si; i < data.size && buf[i] > 0; i++) { }
-                value := String(Buffer(buf+si, i-si));
+                value := String(Buffer(buf + si, i - si));
                 if (buf[i] != 0)
                     throw Exception(sfmt `Malformed header at position $i while parsing value $key`);
 
                 si = i+1;
                 headers[key] = value;
                 if (buf[si] == b",") break;
-
             }
+
             if (buf[si] != b",")
                 throw Exception(sfmt `Malformed netstring at position $si while parsing netstring`);
 
-            request.sendReply(200, "text/plain", sfmt `$headers`);
-            request.doneProcessing = true;
+            # Iterate through request handlers
+            for (handler :in handlers) {
+                if (handler(request)) {
+                    request.doneProcessing = true;
+                    break;
+                }
+            }
+#~             request.sendReply(200, "text/plain", sfmt `$headers`);
+#~             request.doneProcessing = true;
             return si;
         }
 
@@ -277,7 +276,7 @@ class SCGIServer {
         }
 
         @final void __badRequest() {
-            cerr `Invalid request from $(this)\n`;
+            error `Invalid request from $(this)\n`;
         }        
 
         @final bool processInput() {
@@ -300,7 +299,7 @@ class SCGIServer {
             }
         }
 
-    } // end of Client
+    } # end of Client
 
     int __port;
     Socket __sock = {AF_UNIX, SOCK_STREAM, 0};
@@ -324,8 +323,8 @@ class SCGIServer {
 
     void __accept() {
         clientAccepted := __sock.accept();
-        debug `  got connection from $(clientAccepted.addr) with ref count \
-$(clientAccepted.sock.refCount) on $(clientAccepted.sock.fd)`;
+        debug I`  got connection from $(clientAccepted.addr) with ref count 
+                  $(clientAccepted.sock.refCount) on $(clientAccepted.sock.fd)`;
         __poller.add(clientAccepted.sock, POLLIN);
         __clients[clientAccepted.sock] =
             Client(clientAccepted.sock,
@@ -383,8 +382,8 @@ $(clientAccepted.sock.refCount) on $(clientAccepted.sock.fd)`;
                 } else if (POLLERR & evt.revents) {
                     error `  error on socket $(evt.pollable)`;
                 } else {
-                    error `  wtf???  pollable = $(evt.pollable), events = \
-$(evt.events), revents = $(evt.revents)`;
+                    error I`  wtf???  pollable = $(evt.pollable), events = 
+                              $(evt.events), revents = $(evt.revents)`;
                 }
             }
         }

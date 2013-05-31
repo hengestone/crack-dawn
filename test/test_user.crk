@@ -1,0 +1,35 @@
+import crack.io cerr, cout;
+import crack.db.mongo BSON, MONGO_CONN_LOCAL, MongoSync;
+import crack.runtime errno, exit;
+import crack.sys strerror;
+import whip.bson_serializer BSONBufferSerializer, BSONBufferMaterializer;
+import dawn.user User, Session, Phone, Address;
+
+testUser := User();
+sr := BSONBufferSerializer();
+testUser.serialize(sr);
+sr.finish();
+testUserMsg := sr.getBSON();
+// Connect to localhost over TCP/IP
+C := MongoSync("localhost", 27017, true);
+C.setAutoReconnect(true);
+
+if (!C.insert("dawn.test", testUserMsg)) {
+    cerr `Failed to insert document, $(strerror()) ($(errno()))\n`;
+    exit (1);
+}
+
+query := BSON();
+query.finish();
+cnt := C.count("dawn", "test", query);
+
+if (errno() != 0) {
+    cerr `Failed to get document count, $(strerror()) ($(errno()))\n`;
+    exit (1);
+}
+cout `count = $cnt\n`;
+
+if (!C.query("dawn.test", 0,0,10, query, query)) {
+    cerr `Failed to query document, $(strerror()) ($(errno()))\n`;
+    exit (1);
+}

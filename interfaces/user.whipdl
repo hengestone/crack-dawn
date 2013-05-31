@@ -1,0 +1,31 @@
+message Phone {
+  String where = "";
+  String number = "";
+}
+
+message Address {
+  String first = "";
+  String last = "";
+  Array[String] street;
+  String zip = "";
+  String country = "";
+}
+
+message Session {
+  String ip = "";
+  String type = "";
+  String cookie = "";
+}
+
+message User {
+  String __uuid = "";
+  String short = "";
+  String first = "";
+  String last = "";
+  Array[Address] adresses;
+  Array[Phone] phones;
+  Array[Session] sessions;
+  String password = "";
+  String nonce = "";
+  uint hashtype = 0;
+}
