@@ -1,23 +1,16 @@
+import crack.ascii escape;
 import crack.io cerr, cout;
 import crack.db.mongo BSON, MONGO_CONN_LOCAL, MongoSync;
 import crack.runtime errno, exit;
 import crack.sys strerror;
 import whip.bson_serializer BSONBufferSerializer, BSONBufferMaterializer;
+import whip.json_serializer JSONBufferSerializer, JSONBufferMaterializer;
 import dawn.user User, Session, Phone, Address;
+import dawn.mongo_user MongoUser;
 
-testUser := User();
-sr := BSONBufferSerializer();
-testUser.serialize(sr);
-sr.finish();
-testUserMsg := sr.getBSON();
 // Connect to localhost over TCP/IP
 C := MongoSync("localhost", 27017, true);
 C.setAutoReconnect(true);
-
-if (!C.insert("dawn.test", testUserMsg)) {
-    cerr `Failed to insert document, $(strerror()) ($(errno()))\n`;
-    exit (1);
-}
 
 query := BSON();
 query.finish();
@@ -26,10 +19,33 @@ cnt := C.count("dawn", "test", query);
 if (errno() != 0) {
     cerr `Failed to get document count, $(strerror()) ($(errno()))\n`;
     exit (1);
+} else {
+  if (cnt < 2) {
+    testUser := MongoUser();
+    sr := BSONBufferSerializer();
+    testUser.serialize(sr);
+    sr.finish();
+    cout `testUser = $(testUser)\n`;
+    testUserMsg := sr.getBSON();
+    cout `bson = $testUserMsg\n`;
+    if (!C.insert("dawn.test", testUserMsg)) {
+        cerr `Failed to insert document, $(strerror()) ($(errno()))\n`;
+        exit (1);
+    }
+  }
 }
-cout `count = $cnt\n`;
 
-if (!C.query("dawn.test", 0,0,10, query, query)) {
+cursor := C.query("dawn.test", 0, 0, 10, query, query);
+if (!cursor) {
     cerr `Failed to query document, $(strerror()) ($(errno()))\n`;
     exit (1);
+}
+uint i = 0;
+BSON data;
+while (cursor.next()) {
+  data = cursor.data();
+  mt := BSONBufferMaterializer(cursor.data());
+  mt.setStrict(false);
+  user := User(mt);
+  cout `user[$(i++)] = $(cursor.data())\n`;
 }

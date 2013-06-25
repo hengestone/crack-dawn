@@ -13,16 +13,16 @@ import crack.lang AppendBuffer, Buffer, ManagedBuffer, WriteBuffer, Formatter,
                   Exception;
 import crack.ascii strip, escape;
 import crack.cont.array Array;
-import crack.cont.hashmap HashMap;
+import crack.cont.hashmap HashMap, OrderedHashMap;
 import crack.cont.list List;
 import crack.functor Functor1;
 import crack.io cerr, StandardFormatter, StringFormatter, Writer, FileHandle,
                       FStr;
-import crack.lang SystemError;
+import crack.lang SystemError, InvalidStateError;
 import crack.logger DEBUG, INFO, WARN, ERROR, FATAL, Logger, LogFormatter;
 import crack.net InetAddress, UnixAddress, Poller, Socket, AF_UNIX, POLLIN,
-                 POLLOUT, POLLERR, SOCK_STREAM;
-import crack.runtime errno, fileExists, fileRemove;
+                 POLLOUT, POLLERR, SOCK_STREAM;;
+import crack.runtime errno, fileExists, fileRemove, EAGAIN, EWOULDBLOCK;
 import crack.strutil StringArray;
 import crack.sys strerror;
 import crack.time TimeDelta;
@@ -32,49 +32,84 @@ import crack.time TimeDelta;
 StandardFormatter NULL_FORMATTER = null;
 sfmt := FStr();
 
-logger := Logger(cerr, ERROR);
-
-## change formatter here if needed with logger.setFormatter or setFile
-debug := LogFormatter(logger, DEBUG); # All these messages are at DEBUG level
-info := LogFormatter(logger, INFO);
-error := LogFormatter(logger, ERROR);
-
-
 ## Contains the full contents of an SCGIrequest and provides the means for 
 ## communicating back to the client.
 class SCGIRequest {
-    String method, path, version;
-    HashMap[String, String] headers;
+    String method, path;
+    OrderedHashMap[String, String] inHeaders, outHeaders = {},
+                                   inCookies, outCookies = {};
     UnixAddress clientAddr;
     StandardFormatter __clt;
+    Logger _logger;
+    bool _headersSent = false, _replySent = false;
     bool doneProcessing;
 
     oper init(Writer client, ## the channel to write back to the client.
               UnixAddress clientAddr, ## the client address.
-              HashMap[String, String] headers
+              OrderedHashMap[String, String] headers,
+              OrderedHashMap[String, String] cookies,
+              Logger logger
               ) :
-        clientAddr = clientAddr,
-        __clt(client),
-        headers = headers,
-        doneProcessing = false {
+                clientAddr = clientAddr,
+                __clt(client),
+                inHeaders = headers,
+                inCookies = cookies,
+                doneProcessing = false,
+                _logger = logger {
+        method = headers["REQUEST_METHOD"];
+        path = headers["SCRIPT_URL"];
+    }
+
+    bool headersSent() {
+        return _headersSent;
+    }
+
+    bool replySent() {
+        return _replySent;
+    }
+
+    bool isGet() {
+        return method == "GET";
+    }
+
+    bool isPost() {
+        return method == "POST";
+    }
+
+    // Set header value. Return true if an old value was overwritten
+    bool setHeader(String key, String value) {
+        retval := (outHeaders.get(key, null) is null) ? false : true;
+        outHeaders[key] = value;
+        return retval;
+    }
+
+    uint sendHeaders() {
+        if (_headersSent)
+            throw InvalidStateError("Attemping to resend HTTP headers");
+        for (item :in outHeaders)
+            __clt `$(item.key): $(item.val)\r\n`;
+        _headersSent = true;
+        return outHeaders.count();
     }
     
     ## Sends a reply to the client with the specified code, content type and 
     ## contents.
     void sendReply(int code, String contentType, String contents) {
-        __clt I`HTTP/1.1 $code Stat
-                Content-type: $contentType
-                Content-length: $(contents.size)
-                $contents`;
+        if (_replySent)
+            throw InvalidStateError("Attemping to resend HTTP response");
+
+        __clt I`HTTP/1.1 $code OK\r\n`;
+        sendHeaders();
+        __clt `Content-type: $contentType\r\n`;
+        __clt `Content-length: $(contents.size)\r\n\r\n$contents`;
     }
     
     void sendRedirect(int code, String location) {
-        __clt I`HTTP/1.1 $code Stat
-                Location: $location`;
+        __clt I`HTTP/1.1 $code OK\r\nLocation: $location\r\n\r\n`;
     }
 
     void formatTo(Formatter fmt) {
-        fmt `SCGIrequest($__clt, $clientAddr)`;
+        fmt `SCGIrequest($__clt, $clientAddr: $method $path)`;
     }
 }
 
@@ -185,6 +220,7 @@ class OutQueue : List[String] @implements Writer {
 ##
 uint bufSize = 16384;
 class SCGIServer {
+    LogFormatter _debug, _error, _warn, _info;
     
     class Client {
         ManagedBuffer inbuf = {bufSize};
@@ -194,6 +230,7 @@ class SCGIServer {
         Socket sock;
         UnixAddress addr;
         int state;
+        Logger _logger;
         
         OutQueue outQueue = {};
                 
@@ -201,11 +238,14 @@ class SCGIServer {
         ## not processed.
         uint pos;
         
-        oper init(Socket sock, UnixAddress addr, HandlerArray handlers) :
+        oper init(Socket sock, UnixAddress addr, HandlerArray handlers,
+                  Logger logger) :
             sock = sock, 
             addr = addr,
             handlers = handlers,
+            _logger = logger,
             pos = 0 {
+            sock.setNonBlocking(true);
         }
 
         void formatTo(Formatter fmt) {
@@ -214,8 +254,8 @@ class SCGIServer {
 
         uint parseSCGIHeaders(Buffer data) {
             uint si = 0, len = 0;
-            headers := HashMap[String, String]();
-            request = SCGIRequest(sock, addr, headers);
+            headers := OrderedHashMap[String, String]();
+            cookies := OrderedHashMap[String, String]();
             buf := data.buffer;
 
             # parse length
@@ -248,12 +288,14 @@ class SCGIServer {
 
                 si = i+1;
                 headers[key] = value;
+                _logger.debug(sfmt `$key: $value`);
                 if (buf[si] == b",") break;
             }
 
             if (buf[si] != b",")
                 throw Exception(sfmt `Malformed netstring at position $si while parsing netstring`);
 
+            request = SCGIRequest(sock, addr, headers, cookies, _logger);
             # Iterate through request handlers
             for (handler :in handlers) {
                 if (handler(request)) {
@@ -261,8 +303,9 @@ class SCGIServer {
                     break;
                 }
             }
-#~             request.sendReply(200, "text/plain", sfmt `$headers`);
-#~             request.doneProcessing = true;
+            request.sendReply(200, "text/plain", sfmt `$headers`);
+            _logger.debug(sfmt `sent reply to $sock`);
+            request.doneProcessing = true;
             return si;
         }
 
@@ -276,21 +319,32 @@ class SCGIServer {
         }
 
         @final void __badRequest() {
-            error `Invalid request from $(this)\n`;
+            _logger.error(sfmt `Invalid request from $(this)`);
         }        
 
         @final bool processInput() {
             int amtRead = 1;
             WriteBuffer writeBuf;
-            while (amtRead) { // Just read all data for now
+            while (amtRead > 0) { // Just read all data for now
                 writeBuf = WriteBuffer(getInputBuf(), 0, inbuf.cap - pos);
                 amtRead = sock.read(writeBuf);
+                _logger.debug(sfmt `amtRead = $amtRead`);
+                if (amtRead == 0) {
+                    if (errno() == EWOULDBLOCK)
+                        _logger.debug("Got EWOULDBLOCK");
+                    else if (errno() == EAGAIN)
+                        _logger.debug("Got EAGAIN");
+                }
+
                 pos += amtRead;
-                if (amtRead < writeBuf.cap) break;
+                if (amtRead > writeBuf.cap) {
+                    _logger.debug(sfmt `buffer capacity reached`);
+                    break;
+                }
             }
-                        
+            _logger.debug(sfmt `pos=$pos, sock =$sock\n`);
             if (!pos) {
-                info `client.processInput END: empty request!!`;
+                _logger.warn(sfmt `client.processInput END: empty request!!`);
                 return false;
             } else {
                 inbuf.size = pos;
@@ -307,29 +361,43 @@ class SCGIServer {
     Poller __poller = {};
     List[FileHandle] __toRemove = {};
     HandlerArray __handlers = {};
+    Logger _logger;
+    uint _logLevel = ERROR;
 
     oper init(Buffer path) {
-    if (fileExists(path.buffer))
-        fileRemove(path.buffer);
+        if (fileExists(path.buffer))
+            fileRemove(path.buffer);
+
+        _logger = Logger(cerr, _logLevel);
+
+        _debug = LogFormatter(_logger, DEBUG); # All these messages are at DEBUG level
+        _info = LogFormatter(_logger, INFO);
+        _error = LogFormatter(_logger, ERROR);
+
 
         if (!__sock.bind(UnixAddress(path))) 
             throw SystemError('bind failed', errno());
         if (!__sock.listen(5)) 
             throw SystemError('listen failed', errno());
         if (!__sock.setReuseAddr(true))
-            info `WARN: reuseaddr failed: $(strerror())`;
+            _info `WARN: reuseaddr failed: $(strerror())`;
         __poller.add(__sock, POLLIN);
+    }
+
+    Logger logger() {
+        return _logger;
     }
 
     void __accept() {
         clientAccepted := __sock.accept();
-        debug I`  got connection from $(clientAccepted.addr) with ref count 
+        _debug I`  got connection from $(clientAccepted.addr) with ref count 
                   $(clientAccepted.sock.refCount) on $(clientAccepted.sock.fd)`;
         __poller.add(clientAccepted.sock, POLLIN);
         __clients[clientAccepted.sock] =
             Client(clientAccepted.sock,
                    UnixAddress.cast(clientAccepted.addr),
-                   __handlers);
+                   __handlers, _logger);
+        _logger.debug(sfmt `clients=$__clients`);
     }
     
     void __processClientRead(FileHandle p) {
@@ -344,6 +412,7 @@ class SCGIServer {
         if (client && client.request.doneProcessing) {
           client.sock.close();
           __toRemove.append(client.sock);
+          _logger.debug(sfmt `toremove=$__toRemove`);
         }
     }
 
@@ -365,24 +434,24 @@ class SCGIServer {
         
         result := __poller.wait(timeout);
         while (evt := __poller.nx()) {
-            debug `  event is on $(evt.pollable)`;
+            _debug `  event is on $(evt.pollable)`;
             # if it's the server socket, do an accept
             if (evt.pollable is __sock) {
-                debug `  got new connection`;
+                _debug `  got new connection`;
                 __accept();
             # client events
             } else {
                 if (POLLIN & evt.revents) {
-                    debug `  got client read`;
+                    _debug `  got client read`;
                     __processClientRead(evt.pollable);
                     __processClientWrite(evt.pollable);
                 } else if (POLLOUT & evt.revents) {
-                    debug `  got client writable`;
+                    _debug `  got client writable`;
                     __processClientWrite(evt.pollable);
                 } else if (POLLERR & evt.revents) {
-                    error `  error on socket $(evt.pollable)`;
+                    _error `  error on socket $(evt.pollable)`;
                 } else {
-                    error I`  wtf???  pollable = $(evt.pollable), events = 
+                    _error I`  wtf???  pollable = $(evt.pollable), events = 
                               $(evt.events), revents = $(evt.revents)`;
                 }
             }
@@ -391,7 +460,7 @@ class SCGIServer {
         # remove pollables that we're done with.
         while (__toRemove) {
             p := __toRemove.popHead();
-            debug `removing $p`;
+            _debug `removing $p`;
             __poller.remove(p);
             __clients.delete(p);
             p.close();
@@ -407,6 +476,4 @@ class SCGIServer {
     
     int getPort() { return __port; }
 }
-
-
 

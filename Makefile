@@ -13,20 +13,27 @@ ifndef PREFIX
   PREFIX=$(shell ldd `which crack` | grep -e 'libCrackLang'| sed  's/.*libCrackLang.* => \(.*\)\/lib\/libCrackLang.*/\1/g')
 endif
 
-tests=test/test_scgi
+tests=test/test_scgi test/test_user test/test_user_c
 
 VERSION=$(lastword $(shell crack --version))
+MONGO_CFLAGS=`pkg-config --cflags libmongo-client`
+MONGO_LIBS=`pkg-config --libs libmongo-client`
 
 INSTALLDIR=${PREFIX}/lib/crack-${VERSION}/dawn
 
 
 all: test/test_scgi bin/crack_scgi dawn/user.crk
 
-tests: test/test_scgi test/test_user
+tests: test/test_scgi test/test_user test/test_user_c
 
 test/test_scgi: test/test_scgi.crk dawn/scgi.crk
-test/test_user: test/test_user.crk dawn/user.crk
+test/test_user: interfaces/user.whipdl \
+                 test/test_user.crk dawn/user.crk \
+                 dawn/mongo_user.crk
 bin/crack_scgi: bin/crack_scgi.crk dawn/scgi.crk
+
+test/test_user_c : test/test_user.c
+	gcc $< ${MONGO_CFLAGS} -o $@ ${MONGO_LIBS}
 
 dawn/user.crk: interfaces/user.whipdl
 	whipclass -i $< -l crack -s bson -o $@
@@ -41,4 +48,4 @@ install:
 	install -C -D -d dawn ${INSTALLDIR}
 
 clean:
-	rm -fv $(tests) test/*.o test/*~ dawn/*.o
+	rm -fv $(tests) test/*.o test/*~ dawn/*.o bin/crack_scgi bin/crack_scgi.o

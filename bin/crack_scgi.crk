@@ -1,4 +1,5 @@
 import crack.cmdline CmdOptions, Option, CMD_STR, CMD_INT, CMD_FLOAT, CMD_BOOL;
+import crack.logger DEBUG;
 import crack.io FStr;
 import crack.lang Exception;
 import crack.runtime exit;
@@ -7,7 +8,8 @@ import dawn.scgi SCGIServer;
 
 
 CmdOptions options = [Option("help",   "h", "Show help message", "f", CMD_BOOL),
-                      Option("socket", "s", "An example string", "/tmp/crack_scgi.socket", CMD_STR)];
+                      Option("socket", "s", "Socket path", "/tmp/crack_scgi.socket", CMD_STR),
+                      Option("logfile", "l", "Log file", "/tmp/crack_scgi.log", CMD_STR)];
 
 options.parse(argv, false);
 
@@ -17,4 +19,8 @@ if  (options.getBool("help")){
 }
 
 testServer := SCGIServer(options.getString("socket"));
+l := testServer.logger();
+l.setFile(options.getString("logfile"));
+l.setLevel(DEBUG);
+l.info("Starting SCGI server on socket "+options.getString("socket"));
 testServer.run();

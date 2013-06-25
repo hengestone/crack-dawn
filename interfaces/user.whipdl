@@ -18,6 +18,7 @@ message Session {
 }
 
 message User {
+  Oid _id;
   String __uuid = "";
   String short = "";
   String first = "";
