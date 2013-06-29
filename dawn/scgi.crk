@@ -31,33 +31,42 @@ import crack.time TimeDelta;
 
 StandardFormatter NULL_FORMATTER = null;
 sfmt := FStr();
+uint bufSize = 16384;
 
 ## Contains the full contents of an SCGIrequest and provides the means for 
 ## communicating back to the client.
 class SCGIRequest {
-    String method, path;
-    OrderedHashMap[String, String] inHeaders, outHeaders = {},
+    Buffer method, path, data, _indata; // latter is so we keep a reference
+    OrderedHashMap[Buffer, Buffer] inHeaders, outHeaders = {},
                                    inCookies, outCookies = {};
     UnixAddress clientAddr;
     StandardFormatter __clt;
-    Logger _logger;
+    Logger logger;
+
     bool _headersSent = false, _replySent = false;
     bool doneProcessing;
 
     oper init(Writer client, ## the channel to write back to the client.
               UnixAddress clientAddr, ## the client address.
-              OrderedHashMap[String, String] headers,
-              OrderedHashMap[String, String] cookies,
-              Logger logger
+              OrderedHashMap[Buffer, Buffer] headers,
+              OrderedHashMap[Buffer, Buffer] cookies,
+              Logger logger,
+              Buffer indata,
+              uint pos
               ) :
                 clientAddr = clientAddr,
                 __clt(client),
                 inHeaders = headers,
                 inCookies = cookies,
                 doneProcessing = false,
-                _logger = logger {
+                logger = logger,
+                _indata = indata
+    {
         method = headers["REQUEST_METHOD"];
         path = headers["SCRIPT_URL"];
+        logger.debug(FStr() `pos=$pos, _indata.size=$(_indata.size)`);
+        byteptr buf = _indata.buffer + pos;
+        data = Buffer(buf, _indata.size - pos);
     }
 
     bool headersSent() {
@@ -83,9 +92,26 @@ class SCGIRequest {
         return retval;
     }
 
+    AppendBuffer _encodeCookies() {
+        AppendBuffer ck = {bufSize};
+        uint i=0;
+        for (elem :in outCookies) {
+            if (i>0) ck.extend(" ");
+            ck.extend(elem.key);
+            ck.extend("=");
+            ck.extend(elem.val);
+            ck.extend(";");
+            i+=1;
+        }
+        return ck;
+    }
+
     uint sendHeaders() {
         if (_headersSent)
             throw InvalidStateError("Attemping to resend HTTP headers");
+        cookieLine := _encodeCookies();
+        if (cookieLine.size > 0)
+            outHeaders["Cookies"] = cookieLine;
         for (item :in outHeaders)
             __clt `$(item.key): $(item.val)\r\n`;
         _headersSent = true;
@@ -159,50 +185,25 @@ const int _ST_BODY = 2;
 class Error : StringFormatter {
     SCGIRequest req;
     int code;
+
     oper init(SCGIRequest req, int code) : req = req, code = code {}
 
     void leave() {
         result := createString();
-        cerr.write(result);
         req.sendReply(code, "text/plain", result);
     }
 }
 
 ## Request handler interface.  This interface dispatches a handler to 
 ## interface methods corresponding to the HTTP GET, PUT and POST methods.
-@interface SCGIRequestHandler {
-    bool onGet(SCGIRequest req) {
-        Error(req, 405) `GET Method not allowed for $(req.path)`;
-        return true;
-    }
-
-    bool onPut(SCGIRequest req) {
-        Error(req, 405) `PUT Method not allowed for $(req.path)`;
-        return true;
-    }
-    
-    bool onPost(SCGIRequest req) {
-        Error(req, 405) `PUT Method not allowed for $(req.path)`;
-        return true;
-    }
-
-    bool oper call(SCGIRequest req) {
-        if (req.method == 'GET')
-            return onGet(req);
-        else if (req.method == 'POST')
-            return onPost(req);
-        else if (req.method == 'PUT')
-            return onPut(req);
-        else {
-            Error(req, 405) `Invalid method $(req.method)`;
-            return false;
-        }
-    }
-        
+@abstract class SCGIRequestHandler {
+    @abstract bool onGet(SCGIRequest req);
+    @abstract bool onPut(SCGIRequest req);
+    @abstract bool onPost(SCGIRequest req);
+    @abstract bool oper call(SCGIRequest req);
 }
 
-alias RequestHandler = Functor1[bool, SCGIRequest];
-alias HandlerArray = Array[RequestHandler];
+alias HandlerArray = Array[SCGIRequestHandler];
 
 class OutQueue : List[String] @implements Writer {
     void write(Buffer data) {
@@ -218,7 +219,6 @@ class OutQueue : List[String] @implements Writer {
 
 ## An SCGI socket 'server'
 ##
-uint bufSize = 16384;
 class SCGIServer {
     LogFormatter _debug, _error, _warn, _info;
     
@@ -254,9 +254,10 @@ class SCGIServer {
 
         uint parseSCGIHeaders(Buffer data) {
             uint si = 0, len = 0;
-            headers := OrderedHashMap[String, String]();
-            cookies := OrderedHashMap[String, String]();
+            headers := OrderedHashMap[Buffer, Buffer]();
+            cookies := OrderedHashMap[Buffer, Buffer]();
             buf := data.buffer;
+            _logger.debug(String(data));
 
             # parse length
             for (si = 0; si < data.size && buf[si] != b':'; si++) {
@@ -295,7 +296,9 @@ class SCGIServer {
             if (buf[si] != b",")
                 throw Exception(sfmt `Malformed netstring at position $si while parsing netstring`);
 
-            request = SCGIRequest(sock, addr, headers, cookies, _logger);
+            request = SCGIRequest(sock, addr, headers, cookies, _logger, data,
+                                  si+1);
+
             # Iterate through request handlers
             for (handler :in handlers) {
                 if (handler(request)) {
@@ -303,9 +306,13 @@ class SCGIServer {
                     break;
                 }
             }
-            request.sendReply(200, "text/plain", sfmt `$headers`);
-            _logger.debug(sfmt `sent reply to $sock`);
-            request.doneProcessing = true;
+
+            if (!request.doneProcessing) {
+                request.sendReply(200, "text/plain", sfmt `$headers`);
+                _logger.debug(sfmt `sent reply to $sock`);
+                request.doneProcessing = true;
+            }
+
             return si;
         }
 
@@ -418,7 +425,7 @@ class SCGIServer {
 
     ## Adds the given handler to the chain.  Handlers are called in the order 
     ## in which they were added until one of them returns true.
-    void addHandler(Functor1[bool, SCGIRequest] handler) {
+    void addHandler(SCGIRequestHandler handler) {
         __handlers.append(handler);
     }
     

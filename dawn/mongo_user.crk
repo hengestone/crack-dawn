@@ -1,0 +1,13 @@
+import crack.db.mongo_support Oid;
+import dawn.user User;
+
+class MongoUser : User {
+  oper init() : User() { }
+  Oid getOid() {
+    return _id;
+  }
+
+  void setOid(Oid newOid) {
+    _id = newOid;
+  }
+}

@@ -1,0 +1,30 @@
+import crack.io cerr, FStr;
+import crack.net.curl CurlEasy, CURLOPT_POSTFIELDS, CURLE_OK, CURLOPT_POST,
+       CURLOPT_VERBOSE;
+import crack.runtime exit;
+
+errStr := FStr();
+
+void exitError(String msg) {
+    cerr `ERROR: $(msg)\n`;
+    exit(1);
+}
+
+msg := '{"method": "echo", "params": ["Hello JSON-RPC!"], "id": 1, "jsonrpc": "2.0"}';
+url := "http://localhost/dawn/";
+ch := CurlEasy(url);
+ch.setOpt(CURLOPT_POST, 1);
+ch.setOpt(CURLOPT_VERBOSE, 1);
+
+ch.addHeader("SomeHeader", "SomeValue");
+ch.addHeader("Content-Type", "text/json");
+ch.addHeader("Content-Length", FStr() `$(msg.size)`);
+ch.addCookie("TestKey", "TestVal");
+ch.saveCookies();
+ch.addHeaderRaw("\r\n"+msg);
+ch.saveHeaders();
+res := ch.perform();
+
+if (res != CURLE_OK) {
+    exitError(errStr `Downloading $url failed:  $(ch.strError())\n`);
+}

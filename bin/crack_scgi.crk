@@ -5,6 +5,7 @@ import crack.lang Exception;
 import crack.runtime exit;
 import crack.sys argv;
 import dawn.scgi SCGIServer;
+import dawn.jsonrpc JsonRpcHandler;
 
 
 CmdOptions options = [Option("help",   "h", "Show help message", "f", CMD_BOOL),
@@ -23,4 +24,5 @@ l := testServer.logger();
 l.setFile(options.getString("logfile"));
 l.setLevel(DEBUG);
 l.info("Starting SCGI server on socket "+options.getString("socket"));
+testServer.addHandler(JsonRpcHandler());
 testServer.run();

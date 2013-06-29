@@ -1,0 +1,54 @@
+import crack.enc.json JsonParser, JsonStringFormatter, ParseException, JsonObject;
+import dawn.scgi SCGIRequestHandler, Error, SCGIRequest;
+import crack.io cerr, FStr;
+
+class JsonRpcHandler : SCGIRequestHandler {
+    JsonParser parser = {};
+    JsonStringFormatter jfmt = {};
+
+    oper init () {
+    }
+    
+    bool onGet(SCGIRequest req) {
+        Error(req, 405) `GET Method not allowed for $(req.path)`;
+        return true;
+    }
+
+    bool onPut(SCGIRequest req) {
+        Error(req, 405) `PUT Method not allowed for $(req.path)`;
+        return true;
+    }
+    
+    bool onPost(SCGIRequest req) {
+      try {
+        String result;
+        int id;
+        parseVal := parser.parse(req.data);
+        if (parseVal.result && parseVal.result.isa(JsonObject)) {
+          jo := JsonObject.cast(parseVal.result);
+          params := jo["params"];
+          jo.deleteKey("method");
+          jo.deleteKey("params");
+          jo["result"] = params;
+          jfmt.format(jo);
+          req.sendReply(200, "text/json", jfmt.string());
+        }
+        else throw ParseException("Toplevel structure must be a JSON Object", 1, 1);
+      } catch (ParseException px) {
+        req.sendReply(400, "text/json",
+          FStr() `{"error": "Error parsing JSONRPC request: $px", "id": 1, "jsonrpc": "2.0"}`);
+      }
+      return true;
+    }
+
+    bool oper call(SCGIRequest req) {
+        if (req.method == 'GET')
+            return onGet(req);
+        else if (req.method == 'POST')
+            return onPost(req);
+        else if (req.method == 'PUT')
+            return onPut(req);
+        else return false;
+    }
+
+}
