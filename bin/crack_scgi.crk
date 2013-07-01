@@ -1,28 +1,34 @@
 import crack.cmdline CmdOptions, Option, CMD_STR, CMD_INT, CMD_FLOAT, CMD_BOOL;
-import crack.logger DEBUG;
+import crack.logger DEBUG, INFO;
 import crack.io FStr;
 import crack.lang Exception;
 import crack.runtime exit;
 import crack.sys argv;
 import dawn.scgi SCGIServer;
-import dawn.jsonrpc JsonRpcHandler;
+import dawn.jsonrpc JsonRpcHandler, JsonEcho;
 
 
 CmdOptions options = [Option("help",   "h", "Show help message", "f", CMD_BOOL),
                       Option("socket", "s", "Socket path", "/tmp/crack_scgi.socket", CMD_STR),
-                      Option("logfile", "l", "Log file", "/tmp/crack_scgi.log", CMD_STR)];
+                      Option("logfile", "l", "Log file", "", CMD_STR),
+                      Option("debug", "d", "Set log level to debug", "f", CMD_BOOL)];
 
 options.parse(argv, false);
 
 if  (options.getBool("help")){
-   options.printUsage(FStr() `Usage: $(argv[0]) [-s sockfile]\n`);
+   options.printUsage(FStr() `Usage: $(argv[0]) [-s sockfile] [-l logfile] [-d]\n`);
    exit(0);
 }
 
 testServer := SCGIServer(options.getString("socket"));
+logfile := options.getString("logfile");
 l := testServer.logger();
-l.setFile(options.getString("logfile"));
-l.setLevel(DEBUG);
+if (logfile.size > 0) l.setFile(options.getString("logfile"));
+if (options.getBool("debug")) l.setLevel(DEBUG);
+else l.setLevel(INFO);
+
 l.info("Starting SCGI server on socket "+options.getString("socket"));
-testServer.addHandler(JsonRpcHandler());
+rpc := JsonRpcHandler();
+rpc.addMethod(JsonEcho());
+testServer.addHandler(rpc);
 testServer.run();

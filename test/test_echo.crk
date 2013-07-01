@@ -1,7 +1,8 @@
 import crack.io cerr, FStr;
 import crack.net.curl CurlEasy, CURLOPT_POSTFIELDS, CURLE_OK, CURLOPT_POST,
-       CURLOPT_VERBOSE;
+       CURLOPT_VERBOSE, CURLOPT_WRITEFUNCTION, CURLOPT_WRITEDATA;
 import crack.runtime exit;
+import crack.lang AppendBuffer;
 
 errStr := FStr();
 
@@ -10,11 +11,22 @@ void exitError(String msg) {
     exit(1);
 }
 
+// Custom write function
+uintz write_callback(byteptr data, uintz size, uintz nmemb, AppendBuffer buf){
+    buf.extend(data, size*nmemb);
+    return size*nmemb;
+}
+
 msg := '{"method": "echo", "params": ["Hello JSON-RPC!"], "id": 1, "jsonrpc": "2.0"}';
 url := "http://localhost/dawn/";
 ch := CurlEasy(url);
 ch.setOpt(CURLOPT_POST, 1);
-ch.setOpt(CURLOPT_VERBOSE, 1);
+ch.setOpt(CURLOPT_VERBOSE, 0);
+ch.setOpt(CURLOPT_WRITEFUNCTION, write_callback);
+retrievedData := AppendBuffer(2048);
+ch.setOpt(CURLOPT_WRITEDATA, uintz(retrievedData));
+
+
 
 ch.addHeader("SomeHeader", "SomeValue");
 ch.addHeader("Content-Type", "text/json");
@@ -23,8 +35,11 @@ ch.addCookie("TestKey", "TestVal");
 ch.saveCookies();
 ch.addHeaderRaw("\r\n"+msg);
 ch.saveHeaders();
-res := ch.perform();
+for (uint i=0; i < 10000; i++) {
+  res := ch.perform();
 
-if (res != CURLE_OK) {
-    exitError(errStr `Downloading $url failed:  $(ch.strError())\n`);
+  if (res != CURLE_OK) {
+      exitError(errStr `Downloading $url failed:  $(ch.strError())\n`);
+  }
+  retrievedData.size = 0;
 }

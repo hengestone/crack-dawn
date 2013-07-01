@@ -120,7 +120,7 @@ class SCGIRequest {
     
     ## Sends a reply to the client with the specified code, content type and 
     ## contents.
-    void sendReply(int code, String contentType, String contents) {
+    void sendReply(int code, Buffer contentType, Buffer contents) {
         if (_replySent)
             throw InvalidStateError("Attemping to resend HTTP response");
 

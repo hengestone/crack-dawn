@@ -1,12 +1,62 @@
-import crack.enc.json JsonParser, JsonStringFormatter, ParseException, JsonObject;
+import crack.cont.hashmap HashMap;
+import crack.enc.json JsonParser, JsonStringFormatter, ParseException,
+                      JsonObject, JsonString, JsonInt;
+import crack.io cerr, FStr, StringFormatter;
+import crack.lang Buffer, Exception;
 import dawn.scgi SCGIRequestHandler, Error, SCGIRequest;
-import crack.io cerr, FStr;
+
+// JSON Error formatter.  Returns a simple JSONRPC message to the client
+// error reply with the message as its parcel.
+class JsonError : StringFormatter {
+    SCGIRequest req;
+    int code;
+    Buffer id;
+
+    oper init(SCGIRequest req, int code, Buffer id) : req = req, code = code {}
+
+    void leave() {
+        result := createString();
+        req.sendReply(code, "text/json",
+        FStr() `{"error": $result, "id": $id, "jsonrpc": "2.0"}`);
+    }
+}
+
+@abstract class JsonMethod {
+  String name;
+  int code;
+  Buffer type;
+  bool done;
+  @abstract JsonObject exec(SCGIRequest req, JsonObject rpc);
+}
+
+class JsonEcho : JsonMethod {
+  oper init() {
+     name = "echo";
+     type = "text/json";
+     code = 200;
+     done = false;
+  }
+
+  // Receive request object that is a valid jsonrpc 2 request with our method name
+  JsonObject exec(SCGIRequest req, JsonObject rpc) {
+    params := rpc["params"];
+    rpc.deleteKey("method");
+    rpc.deleteKey("params");
+    rpc["result"] = params;
+    return rpc;
+  }
+}
 
 class JsonRpcHandler : SCGIRequestHandler {
-    JsonParser parser = {};
-    JsonStringFormatter jfmt = {};
+    JsonParser _parser = {};
+    JsonStringFormatter _jfmt = {};
+    HashMap[Buffer, JsonMethod] _methods = {};
 
     oper init () {
+    }
+
+    void addMethod(JsonMethod m) {
+      _methods[m.name] = m;
     }
     
     bool onGet(SCGIRequest req) {
@@ -18,25 +68,48 @@ class JsonRpcHandler : SCGIRequestHandler {
         Error(req, 405) `PUT Method not allowed for $(req.path)`;
         return true;
     }
+
+    // Validate request structure
+    bool _validRequest(JsonObject rpc) {
+      if (rpc.get("method", null) is null ||
+          rpc.get("params", null) is null ||
+          rpc.get("id", null) is null) return false;
+      return true;
+    }
     
     bool onPost(SCGIRequest req) {
+      JsonMethod mt = null;
+      JsonObject result;
+
       try {
-        String result;
+        JsonObject result;
         int id;
-        parseVal := parser.parse(req.data);
+        parseVal := _parser.parse(req.data);
         if (parseVal.result && parseVal.result.isa(JsonObject)) {
           jo := JsonObject.cast(parseVal.result);
-          params := jo["params"];
-          jo.deleteKey("method");
-          jo.deleteKey("params");
-          jo["result"] = params;
-          jfmt.format(jo);
-          req.sendReply(200, "text/json", jfmt.string());
+          method := jo.get("method", null);
+          if (method.isa(JsonString)) mt = _methods.get(JsonString.cast(method), null);
+          params := jo.get("params", null);
+          id := jo.get("id", null);
+          if (method is null || params is null || id is null) {
+            JsonError(req, 400, "-1")
+              `Invalid JSONRPC request, need 'method', 'params' and 'id'`;
+          } else if (mt is null) {
+            JsonError(req, 405, "-1") `Unknown method $method`;
+          }
+          else {
+            result = mt.exec(req, jo);
+            if (!mt.done) {
+              _jfmt.format(result);
+              req.sendReply(mt.code, mt.type, _jfmt.string());
+            }
+          }
         }
         else throw ParseException("Toplevel structure must be a JSON Object", 1, 1);
       } catch (ParseException px) {
-        req.sendReply(400, "text/json",
-          FStr() `{"error": "Error parsing JSONRPC request: $px", "id": 1, "jsonrpc": "2.0"}`);
+        JsonError( req, 400, "-1") `Error parsing JSONRPC request: $px`;
+      } catch (Exception ex) {
+        JsonError( req, 400, "-1") `Error processing request: $(ex.text)`;
       }
       return true;
     }
@@ -50,5 +123,4 @@ class JsonRpcHandler : SCGIRequestHandler {
             return onPut(req);
         else return false;
     }
-
 }
