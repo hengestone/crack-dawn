@@ -3,6 +3,7 @@ import crack.enc.json JsonParser, JsonStringFormatter, ParseException,
                       JsonObject, JsonString, JsonInt;
 import crack.io cerr, FStr, StringFormatter;
 import crack.lang Buffer, Exception;
+import crack.logger Logger;
 import dawn.scgi SCGIRequestHandler, Error, SCGIRequest;
 
 // JSON Error formatter.  Returns a simple JSONRPC message to the client
@@ -51,8 +52,9 @@ class JsonRpcHandler : SCGIRequestHandler {
     JsonParser _parser = {};
     JsonStringFormatter _jfmt = {};
     HashMap[Buffer, JsonMethod] _methods = {};
+    Logger _logger;
 
-    oper init () {
+    oper init (Logger l) : _logger=l {
     }
 
     void addMethod(JsonMethod m) {
@@ -80,24 +82,30 @@ class JsonRpcHandler : SCGIRequestHandler {
     bool onPost(SCGIRequest req) {
       JsonMethod mt = null;
       JsonObject result;
+      _logger.debug("Processing POST request");
 
       try {
         JsonObject result;
         int id;
         parseVal := _parser.parse(req.data);
         if (parseVal.result && parseVal.result.isa(JsonObject)) {
+          _logger.debug("Parsed JSON OK");
           jo := JsonObject.cast(parseVal.result);
           method := jo.get("method", null);
           if (method.isa(JsonString)) mt = _methods.get(JsonString.cast(method), null);
           params := jo.get("params", null);
           id := jo.get("id", null);
           if (method is null || params is null || id is null) {
+            _logger.debug("Error1");
             JsonError(req, 400, "-1")
               `Invalid JSONRPC request, need 'method', 'params' and 'id'`;
           } else if (mt is null) {
+            _logger.debug("Error1.5");
             JsonError(req, 405, "-1") `Unknown method $method`;
           }
           else {
+            _jfmt.format(jo);
+            _logger.debug(FStr() `Calling method with $(_jfmt.string())`);
             result = mt.exec(req, jo);
             if (!mt.done) {
               _jfmt.format(result);
@@ -107,10 +115,14 @@ class JsonRpcHandler : SCGIRequestHandler {
         }
         else throw ParseException("Toplevel structure must be a JSON Object", 1, 1);
       } catch (ParseException px) {
-        JsonError( req, 400, "-1") `Error parsing JSONRPC request: $px`;
-      } catch (Exception ex) {
-        JsonError( req, 400, "-1") `Error processing request: $(ex.text)`;
+        _logger.debug("Error2");
+        JsonError(req, 400, "-1") `Error parsing JSONRPC request: $px`;
       }
+#~       catch (Exception ex) {
+#~         _logger.debug(FStr() `Error processing request: $(ex.text)`);
+#~         JsonError(req, 400, "-1") `Error processing request: $(ex.text)`;
+#~       }
+      _logger.debug("DONE Processing POST request");
       return true;
     }
 

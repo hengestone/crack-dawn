@@ -13,7 +13,8 @@ ifndef PREFIX
   PREFIX=$(shell ldd `which crack` | grep -e 'libCrackLang'| sed  's/.*libCrackLang.* => \(.*\)\/lib\/libCrackLang.*/\1/g')
 endif
 
-tests=test/test_scgi test/test_user test/test_user_c test/test_echo
+tests=test/test_scgi test/test_user test/test_user_c test/test_echo \
+      test/test_shorten
 libs=dawn/jsonrpc.crk dawn/scgi.crk
 
 VERSION=$(lastword $(shell crack --version))
@@ -25,14 +26,17 @@ INSTALLDIR=${PREFIX}/lib/crack-${VERSION}/dawn
 
 all: bin/crack_scgi dawn/user.crk
 
-tests: test/test_echo test/test_scgi test/test_user test/test_user_c
+tests: test/test_echo test/test_scgi test/test_user test/test_user_c \
+       test/test_shorten
 
 test/test_scgi: test/test_scgi.crk $(libs)
+test/test_echo: test/test_shorten.crk test/shorten.crk test/shortener.crk \
+                 $(libs)
 test/test_echo: test/test_echo.crk $(libs)
 test/test_user: interfaces/user.whipdl \
                  test/test_user.crk dawn/user.crk \
                  dawn/mongo_user.crk
-bin/crack_scgi: bin/crack_scgi.crk $(libs)
+bin/crack_scgi: bin/crack_scgi.crk test/shortener.crk test/shorten.crk $(libs)
 
 test/test_user_c : test/test_user.c
 	gcc $< ${MONGO_CFLAGS} -o $@ ${MONGO_LIBS}

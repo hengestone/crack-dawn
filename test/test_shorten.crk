@@ -2,7 +2,7 @@ import crack.io cerr, FStr;
 import crack.net.curl CurlEasy, CURLOPT_POSTFIELDS, CURLE_OK, CURLOPT_POST,
        CURLOPT_VERBOSE, CURLOPT_WRITEFUNCTION, CURLOPT_WRITEDATA;
 import crack.runtime exit;
-import crack.lang AppendBuffer;
+import crack.lang AppendBuffer, CString;
 
 errStr := FStr();
 
@@ -17,7 +17,7 @@ uintz write_callback(byteptr data, uintz size, uintz nmemb, AppendBuffer buf){
     return size*nmemb;
 }
 
-msg := '{"method": "echo", "params": ["Hello JSON-RPC!"], "id": 1, "jsonrpc": "2.0"}';
+msg := CString('{"method": "shorten", "params": ["http://localhost/dawn/"], "id": 1, "jsonrpc": "2.0"}');
 url := "http://localhost/dawn/";
 ch := CurlEasy(url);
 ch.setOpt(CURLOPT_POST, 1);
@@ -35,11 +35,12 @@ ch.addCookie("TestKey", "TestVal");
 ch.saveCookies();
 ch.addHeaderRaw("\r\n"+msg);
 ch.saveHeaders();
-for (uint i=0; i < 1; i++) {
+#~ for (uint i=0; i < 10; i++) {
   res := ch.perform();
 
   if (res != CURLE_OK) {
       exitError(errStr `Downloading $url failed:  $(ch.strError())\n`);
   }
+  cerr `$retrievedData\n`;
   retrievedData.size = 0;
-}
+#~ }

@@ -1,0 +1,101 @@
+import crack.ascii escape, hex;
+import crack.db.mongo BSON, MONGO_CONN_LOCAL, MongoSync;
+import crack.enc.json JsonParser, JsonStringFormatter, ParseException,
+                      JsonObject, JsonString, JsonInt, JsonArray;
+import crack.hash.murmur3 Murmur3_32;
+import crack.io cerr, cout, FStr;
+import crack.lang CString;
+import crack.logger Logger;
+import crack.runtime errno, exit;
+import crack.sys strerror;
+import dawn.jsonrpc JsonRpcHandler, JsonEcho, JsonMethod, JsonError;
+import dawn.scgi SCGIRequestHandler, Error, SCGIRequest;
+import test.shorten ShortUrl;
+import whip.bson_serializer BSONBufferSerializer, BSONBufferMaterializer;
+import whip.json_serializer JSONBufferSerializer, JSONBufferMaterializer;
+
+
+class JsonShortener : JsonMethod {
+  BSON _query;
+  CString ns = "dawn.shorten";
+  MongoSync _conn;
+  Logger _logger;
+
+  oper init(MongoSync c, Logger l) : _conn = c, _logger = l {
+    name = "shorten";
+    type = "text/json";
+    code = 200;
+    done = false;
+  }
+
+  // Receive request object that is a valid jsonrpc 2 request with our method name
+  JsonObject exec(SCGIRequest req, JsonObject rpc) {
+    done = false;
+    params := rpc["params"];
+    rpc.deleteKey("method"); // re-using Request object for the reply
+    rpc.deleteKey("params");
+    
+    JsonString url = null;
+    ShortUrl record = null;
+
+    if (params.isa(JsonString))
+      url = JsonString.cast(params);
+    else if (params.isa(JsonArray)) {
+      A := JsonArray.cast(params);
+      if (A.count() > 0 && A[0].isa(JsonString))
+        url = JsonString.cast(A[0]);
+    }
+
+    if (url is null) {
+      JsonError(req, 400, "-1") `$name method takes one string argument`;
+      done = true;
+    } else {
+      _query = BSON();
+      _query.appendString("url", String.cast(url));
+      _query.finish();
+      _logger.debug(FStr() `Submitting query $_query`);
+
+      cursor := _conn.query(ns, 0, 0, 10, _query, null);
+
+      while (cursor.next()) {
+        mt := BSONBufferMaterializer(cursor.data());
+        mt.setStrict(false);
+        record = ShortUrl(mt);
+        _logger.debug(FStr() `Got record $(mt.getBSON())`);
+      }
+
+      if (record is null) { // We have to create it
+        record = ShortUrl();
+        record.url = url;
+        record.short = hex(Murmur3_32(url).digest());
+        sr := BSONBufferSerializer();
+        record.serialize(sr, null);
+        sr.finish();
+        _logger.debug(FStr() `Inserted record $(sr.getBSON())`);
+        _conn.insert(ns, sr.getBSON());
+      }
+    }
+
+    if (!done && !(record is null)) {
+      res := JsonObject();
+      res["url"] = record.url;
+      res["short"] = record.short;
+      rpc["result"] = res;
+    }
+    return rpc;
+  }
+}
+
+
+// An url shortener JSONRPC service 
+class ShortenerHandler : JsonRpcHandler {
+  MongoSync _conn;
+
+  oper init(String host, int port, Logger l) : JsonRpcHandler(l) {
+    // Connect to localhost over TCP/IP
+    _conn = MongoSync("localhost", 27017, true);
+    _conn.setAutoReconnect(true);
+    addMethod(JsonEcho());
+    addMethod(JsonShortener(_conn, l));
+  }
+}

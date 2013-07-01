@@ -125,9 +125,11 @@ class SCGIRequest {
             throw InvalidStateError("Attemping to resend HTTP response");
 
         __clt I`HTTP/1.1 $code OK\r\n`;
+        logger.debug(FStr() `Sending headers $outHeaders`);
         sendHeaders();
         __clt `Content-type: $contentType\r\n`;
         __clt `Content-length: $(contents.size)\r\n\r\n$contents`;
+        logger.debug(String(contents));
     }
     
     void sendRedirect(int code, String location) {
