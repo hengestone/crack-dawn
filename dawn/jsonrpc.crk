@@ -115,13 +115,13 @@ class JsonRpcHandler : SCGIRequestHandler {
         }
         else throw ParseException("Toplevel structure must be a JSON Object", 1, 1);
       } catch (ParseException px) {
-        _logger.debug("Error2");
+        _logger.info("Error2");
         JsonError(req, 400, "-1") `Error parsing JSONRPC request: $px`;
       }
-#~       catch (Exception ex) {
-#~         _logger.debug(FStr() `Error processing request: $(ex.text)`);
-#~         JsonError(req, 400, "-1") `Error processing request: $(ex.text)`;
-#~       }
+      catch (Exception ex) {
+        _logger.error(FStr() `Error processing request: $(ex.text). Data was\n$(req.data)`);
+        JsonError(req, 400, "-1") `Error processing request: $(ex.text)`;
+      }
       _logger.debug("DONE Processing POST request");
       return true;
     }

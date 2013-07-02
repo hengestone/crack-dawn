@@ -1,0 +1,5 @@
+message ShortUrl {
+  Oid _id;
+  String url = "";
+  String short = "";
+}

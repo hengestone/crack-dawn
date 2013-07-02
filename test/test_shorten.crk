@@ -1,8 +1,9 @@
 import crack.io cerr, FStr;
 import crack.net.curl CurlEasy, CURLOPT_POSTFIELDS, CURLE_OK, CURLOPT_POST,
-       CURLOPT_VERBOSE, CURLOPT_WRITEFUNCTION, CURLOPT_WRITEDATA;
-import crack.runtime exit;
-import crack.lang AppendBuffer, CString;
+       CURLOPT_VERBOSE, CURLOPT_WRITEFUNCTION, CURLOPT_WRITEDATA,
+       CURLOPT_READFUNCTION, CURLOPT_READDATA, CURLOPT_POSTFIELDSIZE;
+import crack.runtime exit, memcpy;
+import crack.lang AppendBuffer, CString, Buffer;
 
 errStr := FStr();
 
@@ -17,30 +18,33 @@ uintz write_callback(byteptr data, uintz size, uintz nmemb, AppendBuffer buf){
     return size*nmemb;
 }
 
-msg := CString('{"method": "shorten", "params": ["http://localhost/dawn/"], "id": 1, "jsonrpc": "2.0"}');
+msg := CString('{"method": "shorten", "params": ["http://www.google.com/"], "id": 1, "jsonrpc": "2.0"}');
 url := "http://localhost/dawn/";
 ch := CurlEasy(url);
 ch.setOpt(CURLOPT_POST, 1);
-ch.setOpt(CURLOPT_VERBOSE, 1);
+ch.setOpt(CURLOPT_VERBOSE, 0);
+
+ch.setOpt(CURLOPT_POSTFIELDS, msg);
+ch.setOpt(CURLOPT_POSTFIELDSIZE, msg.size);
+
 ch.setOpt(CURLOPT_WRITEFUNCTION, write_callback);
 retrievedData := AppendBuffer(2048);
 ch.setOpt(CURLOPT_WRITEDATA, uintz(retrievedData));
-
-
 
 ch.addHeader("SomeHeader", "SomeValue");
 ch.addHeader("Content-Type", "text/json");
 ch.addHeader("Content-Length", FStr() `$(msg.size)`);
 ch.addCookie("TestKey", "TestVal");
+#~ ch.addHeader("Expect", "100-continue");
 ch.saveCookies();
-ch.addHeaderRaw("\r\n"+msg);
 ch.saveHeaders();
-#~ for (uint i=0; i < 10; i++) {
+
+#~ for (uint i=0; i < 10000; i++) {
   res := ch.perform();
 
   if (res != CURLE_OK) {
       exitError(errStr `Downloading $url failed:  $(ch.strError())\n`);
   }
-  cerr `$retrievedData\n`;
+#~   cerr `$retrievedData\n`;
   retrievedData.size = 0;
 #~ }

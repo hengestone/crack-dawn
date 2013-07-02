@@ -10,7 +10,7 @@
 ## 
 
 import crack.lang AppendBuffer, Buffer, ManagedBuffer, WriteBuffer, Formatter,
-                  Exception;
+                  Exception, KeyError;
 import crack.ascii strip, escape;
 import crack.cont.array Array;
 import crack.cont.hashmap HashMap, OrderedHashMap;
@@ -300,6 +300,11 @@ class SCGIServer {
 
             request = SCGIRequest(sock, addr, headers, cookies, _logger, data,
                                   si+1);
+            try {
+                _logger.info(sfmt `$(headers["REQUEST_METHOD"]) $(headers["SERVER_NAME"]):$(headers["SERVER_PORT"])$(headers["SCRIPT_URL"])`);
+            } catch (KeyError ke) {
+                _logger.debug(sfmt `Error logging request: $(ke.text). Data:\n$data`);
+            }
 
             # Iterate through request handlers
             for (handler :in handlers) {

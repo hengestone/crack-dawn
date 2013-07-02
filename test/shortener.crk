@@ -4,7 +4,7 @@ import crack.enc.json JsonParser, JsonStringFormatter, ParseException,
                       JsonObject, JsonString, JsonInt, JsonArray;
 import crack.hash.murmur3 Murmur3_32;
 import crack.io cerr, cout, FStr;
-import crack.lang CString;
+import crack.lang CString, Buffer;
 import crack.logger Logger;
 import crack.runtime errno, exit;
 import crack.sys strerror;
@@ -14,10 +14,10 @@ import test.shorten ShortUrl;
 import whip.bson_serializer BSONBufferSerializer, BSONBufferMaterializer;
 import whip.json_serializer JSONBufferSerializer, JSONBufferMaterializer;
 
+CString ns = "dawn.shorten";
 
 class JsonShortener : JsonMethod {
   BSON _query;
-  CString ns = "dawn.shorten";
   MongoSync _conn;
   Logger _logger;
 
@@ -55,9 +55,9 @@ class JsonShortener : JsonMethod {
       _query.finish();
       _logger.debug(FStr() `Submitting query $_query`);
 
-      cursor := _conn.query(ns, 0, 0, 10, _query, null);
+      cursor := _conn.query(ns, 0, 0, 1, _query, null);
 
-      while (cursor.next()) {
+      if (cursor.next()) {
         mt := BSONBufferMaterializer(cursor.data());
         mt.setStrict(false);
         record = ShortUrl(mt);
@@ -89,7 +89,10 @@ class JsonShortener : JsonMethod {
 
 // An url shortener JSONRPC service 
 class ShortenerHandler : JsonRpcHandler {
+  BSON _query;
   MongoSync _conn;
+  ShortUrl _record;
+  Buffer _short;
 
   oper init(String host, int port, Logger l) : JsonRpcHandler(l) {
     // Connect to localhost over TCP/IP
@@ -98,4 +101,34 @@ class ShortenerHandler : JsonRpcHandler {
     addMethod(JsonEcho());
     addMethod(JsonShortener(_conn, l));
   }
+
+  bool onGet(SCGIRequest req) {
+    path := req.inHeaders['PATH_INFO'];
+    _logger.debug(FStr() `path.size=$(path.size), path[0] = $(path[0])`);
+    if (path.size > 1 && path[0] == b'/' && path.size < 10) {
+      _short = Buffer(path.buffer + 1, path.size - 1);
+      _query = BSON();
+      _query.appendString("short", String(_short));
+      _query.finish();
+
+      _record = null;
+      _logger.debug(FStr() `Submitting query $_query`);
+
+      cursor := _conn.query(ns, 0, 0, 1, _query, null);
+
+      if (cursor.next()) {
+        mt := BSONBufferMaterializer(cursor.data());
+        mt.setStrict(false);
+        _record = ShortUrl(mt);
+        _logger.debug(FStr() `Got record $(mt.getBSON())`);
+        req.sendRedirect(200, _record.url);
+      }
+      else
+        Error(req, 404) `Short key $_short not found`;
+    }
+    else
+      Error(req, 400) `Malformed request $(req.inHeaders['SCRIPT_URL'])`;
+    return true;
+  }
+
 }

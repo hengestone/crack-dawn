@@ -25,7 +25,7 @@ logfile := options.getString("logfile");
 l := testServer.logger();
 if (logfile.size > 0) l.setFile(options.getString("logfile"));
 #~ if (options.getBool("debug"))
-l.setLevel(DEBUG);
+  l.setLevel(DEBUG);
 #~ else l.setLevel(INFO);
 
 l.info("Starting SCGI server on socket "+options.getString("socket"));
