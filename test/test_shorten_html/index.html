@@ -1,0 +1,73 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" 
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <title>Shorten test</title>
+    <!-- add one of the jQWidgets styles -->
+ <link rel="stylesheet" 
+    href="/jqwidgets/styles/jqx.base.css" type="text/css" />
+    <link rel="stylesheet" 
+    href="/jqwidgets/styles/jqx.darkblue.css" type="text/css" />
+    <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/json2/20121008/json2.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/knockout/2.2.1/knockout-min.js"></script>
+    <!-- add the jQWidgets framework -->
+    <script type="text/javascript" src="/jqwidgets/jqxcore.js"></script>
+    <!-- add one or more widgets -->
+    <script type="text/javascript" src="/jqwidgets/jqxbuttons.js"></script>
+    <script type="text/javascript" src="/jqwidgets/jqxinput.js"></script>
+</head>
+<body>
+  URL:
+  <input id="myInput" data-bind="value: url" />
+  <input type="button" value="Shorten Me!" id='myButton' data-bind="click: updateLink"/>
+    ShortURL: <a data-bind='attr : {href : shorturl}'><span data-bind='text : shorturl'></span></a>
+
+  </p>
+ 
+  <script type="text/javascript">
+    var vm;
+    var rpcId = 0;
+    var request = {jsonrpc: "2.0", id: rpcId, method: "shorten", params: null};
+    var reqID = 0;
+
+    function setUrl(response) {
+      vm.hash(response.result.short);
+    }
+    
+    $(document).ready(function () {
+        ViewModel = function (url) {
+            this.url = ko.observable(url);
+            this.hash = ko.observable("");
+            this.shorturl = ko.computed(function() {
+                return top.document.baseURI + "dawn/" + this.hash();    
+            }, this);
+
+            this.updateLink = function() {
+              request.params = this.url();
+              $.ajax({url: "/dawn/",
+                      data: JSON.stringify(request),
+                      type: "POST",
+                      dataType: "json",
+                      success: setUrl,
+                      error: function(err, status, thrown) {alert("ERROR:"+status); }
+                     });
+            }
+
+        };
+
+        vm = new ViewModel("http://www.google.com");
+        ko.applyBindings(vm); // This makes Knockout get to work
+
+        $("#myButton").jqxButton(
+         { width: '8em', height: '2em', theme: 'darkblue' }
+        );
+        $("#myInput").jqxInput(
+         { width: '16em', height: '2em', theme: 'darkblue' }
+        );
+
+    });
+
+  </script>
+</body>
+</html>
