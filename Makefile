@@ -50,8 +50,8 @@ dawn/user.crk: interfaces/user.whipdl
 
 
 install:
-	mkdir -p ${INSTALLDIR}
 	install -C -D -d dawn ${INSTALLDIR}
+	install  dawn/*.crk ${INSTALLDIR}
 
 clean:
 	rm -fv $(tests) test/*.o test/*~ dawn/*.o bin/crack_scgi bin/crack_scgi.o
