@@ -37,7 +37,6 @@ ch.addHeader("SomeHeader", "SomeValue");
 ch.addHeader("Content-Type", "text/json");
 ch.addHeader("Content-Length", FStr() `$(msg.size)`);
 ch.addCookie("TestKey", "TestVal");
-#~ ch.addHeader("Expect", "100-continue");
 ch.saveCookies();
 ch.saveHeaders();
 for (uint i=0; i < 10000; i++) {

@@ -1,0 +1,108 @@
+import crack.cont.hashmap HashMap, OrderedHashMap;
+import crack.enc.json JsonParser, JsonStringFormatter, ParseException,
+                      JsonObject, JsonString, JsonInt, JsonArray;
+import crack.io cerr, FStr, StringFormatter;
+import crack.lang Buffer, ManagedBuffer, Exception;
+import crack.logger Logger;
+import crack.net.curl UrlEncode, UrlDecode;
+import crack.strutil split;
+import dawn.scgi SCGIRequestHandler, Error, SCGIRequest;
+
+sfmt := FStr();
+
+class FormFields : OrderedHashMap[String, String] {
+  oper init(String forminput) : OrderedHashMap[String, String]() {
+    decoded := UrlDecode(forminput);
+    items := split(decoded, "&");
+    for (item :in items) {
+      pair := split(item, "=");
+      if (pair.count() == 2) {
+        set(pair[0], pair[1]);
+      }
+    }
+  }
+}
+
+@abstract class FormPath {
+  int code;
+  Buffer type;
+  bool done;
+  @abstract bool oper call(SCGIRequest req, FormFields fields);
+}
+
+
+class FormHandler : SCGIRequestHandler {
+    HashMap[Buffer, FormPath] _paths = {};
+    Logger _logger;
+
+    oper init (Logger l) : _logger=l {
+    }
+
+    void addPath(Buffer path, FormPath p) {
+      _paths[path] = p;
+    }
+
+    HashMap[Buffer, FormPath] getPaths() {
+      return _paths;
+    }
+
+    bool _handleForm(SCGIRequest req, String data) {
+      try {
+        int id;
+        fields := FormFields(data);
+        fp := _paths.get(req.inHeaders['PATH_INFO'], null);
+        if (!(fp is null))
+          fp(req, fields);
+        else
+          req.sendReply(404, "text/plain", sfmt `No form handler registered for path $(req.inHeaders['PATH_INFO'])`);
+      }
+      catch (Exception ex) {
+        _logger.error(FStr() `Error processing request: $(ex.text). Data was\n$(req.data)`);
+        req.sendReply(400, "text/plain", sfmt `Error processing request: $(ex.text)`);
+      }
+      _logger.debug("DONE Processing form request");
+      return true;
+    }
+    
+    bool onGet(SCGIRequest req) { // TODO add GET handling
+      d := req.inHeaders['QUERY_STRING'];
+      _logger.debug("Processing GET form request");
+      if (d.size == 0) {
+        req.sendReply(400, "text/plain", "Empty form error");
+        return true;
+      }
+        
+      return _handleForm(req, d);
+    }
+
+    bool onPut(SCGIRequest req) {
+        return false;
+    }
+
+    bool onPost(SCGIRequest req) {
+      _logger.debug("Processing POST form request");
+      return _handleForm(req, String(req.data));
+    }
+
+    bool oper call(SCGIRequest req) {
+        if (req.method == 'GET')
+            return onGet(req);
+        else if (req.method == 'POST')
+            return onPost(req);
+        else if (req.method == 'PUT')
+            return onPut(req);
+        else return false;
+    }
+}
+
+class FormEcho : FormPath {
+    Logger _logger;
+
+    oper init (Logger l) : _logger=l {
+    }
+
+    bool oper call(SCGIRequest req, FormFields fields) {
+      req.sendReply(200, "text/plain", sfmt `$fields`);
+      return true;
+    }
+}

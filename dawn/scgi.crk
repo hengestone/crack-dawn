@@ -64,7 +64,7 @@ class SCGIRequest {
     {
         method = headers["REQUEST_METHOD"];
         path = headers["SCRIPT_URL"];
-        logger.debug(FStr() `pos=$pos, _indata.size=$(_indata.size)`);
+        logger.debug(FStr() `pos=$pos, _indata.size = $(_indata.size)`);
         byteptr buf = _indata.buffer + pos;
         data = Buffer(buf, _indata.size - pos);
     }

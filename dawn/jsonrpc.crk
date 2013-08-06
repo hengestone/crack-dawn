@@ -1,6 +1,6 @@
 import crack.cont.hashmap HashMap;
 import crack.enc.json JsonParser, JsonStringFormatter, ParseException,
-                      JsonObject, JsonString, JsonInt;
+                      JsonObject, JsonString, JsonInt, JsonArray;
 import crack.io cerr, FStr, StringFormatter;
 import crack.lang Buffer, Exception;
 import crack.logger Logger;
@@ -18,7 +18,7 @@ class JsonError : StringFormatter {
     void leave() {
         result := createString();
         req.sendReply(code, "text/json",
-        FStr() `{"error": $result, "id": $id, "jsonrpc": "2.0"}`);
+        FStr() `{"error": "$result", "id": $id, "jsonrpc": "2.0"}`);
     }
 }
 
@@ -60,15 +60,17 @@ class JsonRpcHandler : SCGIRequestHandler {
     void addMethod(JsonMethod m) {
       _methods[m.name] = m;
     }
+
+    HashMap[Buffer, JsonMethod] getMethods() {
+      return _methods;
+    }
     
     bool onGet(SCGIRequest req) {
-        Error(req, 405) `GET Method not allowed for $(req.path)`;
-        return true;
+        return false;
     }
 
     bool onPut(SCGIRequest req) {
-        Error(req, 405) `PUT Method not allowed for $(req.path)`;
-        return true;
+        return false;
     }
 
     // Validate request structure
@@ -82,7 +84,8 @@ class JsonRpcHandler : SCGIRequestHandler {
     bool onPost(SCGIRequest req) {
       JsonMethod mt = null;
       JsonObject result;
-      _logger.debug("Processing POST request");
+      _logger.debug("JsonRpcHandler Processing POST request");
+      String method = null;
 
       try {
         JsonObject result;
@@ -91,16 +94,17 @@ class JsonRpcHandler : SCGIRequestHandler {
         if (parseVal.result && parseVal.result.isa(JsonObject)) {
           _logger.debug("Parsed JSON OK");
           jo := JsonObject.cast(parseVal.result);
-          method := jo.get("method", null);
-          if (method.isa(JsonString)) mt = _methods.get(JsonString.cast(method), null);
+          jmethod := jo.get("method", null);
+          if (jmethod.isa(JsonString)) {
+            method = String.cast(jmethod);
+            mt = _methods.get(JsonString.cast(jmethod), null);
+          }
           params := jo.get("params", null);
           id := jo.get("id", null);
           if (method is null || params is null || id is null) {
-            _logger.debug("Error1");
             JsonError(req, 400, "-1")
               `Invalid JSONRPC request, need 'method', 'params' and 'id'`;
           } else if (mt is null) {
-            _logger.debug("Error1.5");
             JsonError(req, 405, "-1") `Unknown method $method`;
           }
           else {
@@ -122,7 +126,7 @@ class JsonRpcHandler : SCGIRequestHandler {
         _logger.error(FStr() `Error processing request: $(ex.text). Data was\n$(req.data)`);
         JsonError(req, 400, "-1") `Error processing request: $(ex.text)`;
       }
-      _logger.debug("DONE Processing POST request");
+      _logger.debug("JsonRpcHandler DONE Processing POST request");
       return true;
     }
 
@@ -136,3 +140,27 @@ class JsonRpcHandler : SCGIRequestHandler {
         else return false;
     }
 }
+
+#~ class JsonGetMethods : JsonMethod {
+#~   JsonRpcHandler _handler;
+#~   oper init(JsonRpcHandler h) : _handler = h {
+#~      name = "methods";
+#~      type = "text/json";
+#~      code = 200;
+#~      done = false;
+#~   }
+#~ 
+#~   // Receive request object that is a valid jsonrpc 2 request with our method name
+#~   JsonObject exec(SCGIRequest req, JsonObject rpc) {
+#~     params := rpc["params"];
+#~     rpc.deleteKey("method");
+#~     rpc.deleteKey("params");
+#~     res := JsonArray();
+#~     for (item :in _handler.getMethods())
+#~       JsonArray.append(JsonString(item.key));
+#~ 
+#~     rpc["result"] = res;
+#~     
+#~     return rpc;
+#~   }
+#~ }
