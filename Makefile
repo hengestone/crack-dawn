@@ -15,7 +15,7 @@ endif
 
 tests=test/test_scgi test/test_user test/test_user_c test/test_echo \
       test/test_shorten
-libs=dawn/jsonrpc.crk dawn/scgi.crk
+libs=dawn/jsonrpc.crk dawn/scgi.crk dawn/jsonrpc.crk dawn/formhandler.crk
 
 VERSION=$(lastword $(shell crack --version))
 MONGO_CFLAGS=`pkg-config --cflags libmongo-client`
@@ -34,7 +34,7 @@ test/test_echo: test/test_shorten.crk test/shorten.crk test/shortener.crk \
                  $(libs)
 test/test_echo: test/test_echo.crk $(libs)
 test/test_dirtree: test/test_dirtree.crk $(libs)
-test/test_form: test/test_form.crk
+test/test_form: test/test_form.crk $(libs)
 test/test_user: interfaces/user.whipdl \
                  test/test_user.crk dawn/user.crk \
                  dawn/mongo_user.crk

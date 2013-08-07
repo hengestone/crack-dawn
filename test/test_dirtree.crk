@@ -2,21 +2,37 @@ import crack.logger Logger, DEBUG;
 import crack.io cerr, cout;
 import crack.strutil split;
 import dawn.scgi DirTree;
-import dawn.formhandler FormHandler;
+import dawn.formhandler FormHandler, FormEcho;
+import dawn.jsonrpc JsonRpcHandler, JsonEcho;
+import crack.cont.array Array;
 
 l := Logger(cerr, DEBUG);
-fh := FormHandler(l);
-path1 := "/qmct";
-path2 := "/qmct/text";
-path3 := "/qmct/text/file";
-path4 := "/qmct/text/file/txt";
+form := FormHandler(l);
+form2 := FormHandler(l);
+form3 := FormHandler(l);
+form.addPath("/", FormEcho(l));
+form.addPath("/dawn", FormEcho(l));
+form2.addPath("/dawn/text", FormEcho(l));
+form3.addPath("/dawn/text/file/txt", FormEcho(l));
+json := JsonRpcHandler(l);
+json.addMethod(JsonEcho());
+path0 := "/";
+path1 := "/dawn";
+path2 := "/rpc2";
+path3 := "/dawn/text";
+path4 := "/dawn/text/file";
+path5 := "/dawn/text/file/txt";
 
-tree := DirTree("", fh, 0);
-tree.addHandler(split(path1, "/"), 1, fh);
-tree.addHandler(split(path2, "/"), 1, fh);
+tree := DirTree("", form, 0);
+tree.addHandler(split(path1, "/"), 1, form);
+tree.addHandler(split(path3, "/"), 1, form2);
+tree.addHandler(split(path5, "/"), 1, form3);
+tree.addHandler(split(path2, "/"), 1, json);
 cout `tree=\n$tree\n`;
 
-cout `find($path1) = $(tree.findHandler(split(path1, "/"), 1))\n`;
-cout `find($path2) = $(tree.findHandler(split(path2, "/"), 1))\n`;
-cout `find($path3) = $(tree.findHandler(split(path3, "/"), 1))\n`;
-cout `find($path4) = $(tree.findHandler(split(path4, "/"), 1))\n`;
+String find(String path) {
+  cout `find($path) = $(tree.findHandler(split(path, "/"), 1))\n`;
+  return path;
+}
+
+Array[String]![path0, path1, path2, path3, path4, path5, "/other"].map(find);

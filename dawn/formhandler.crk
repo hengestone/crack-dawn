@@ -1,7 +1,7 @@
 import crack.cont.hashmap HashMap, OrderedHashMap;
 import crack.enc.json JsonParser, JsonStringFormatter, ParseException,
                       JsonObject, JsonString, JsonInt, JsonArray;
-import crack.io cerr, FStr, StringFormatter;
+import crack.io cerr, FStr, StringFormatter, Formatter;
 import crack.lang Buffer, ManagedBuffer, Exception;
 import crack.logger Logger;
 import crack.net.curl UrlEncode, UrlDecode;
@@ -94,6 +94,18 @@ class FormHandler : SCGIRequestHandler {
             return onPut(req);
         else return false;
     }
+
+    void formatTo(Formatter fmt) {
+      fmt.write("FormHandler(");
+      bool first = true;
+      for (item :in _paths) {
+        if (first) first = false;
+        else fmt.write(", ");
+        fmt.write(item.key);
+      }
+      fmt.write(")");
+    }
+
 }
 
 class FormEcho : FormPath {

@@ -36,6 +36,6 @@ l.info("Starting SCGI server on socket "+options.getString("socket"));
 #~ rpc := ShortenerHandler("localhost", 27017, l);
 fh :=  FormHandler(l);
 rpf := FormEcho(l); // remote procedure form
-fh.addPath("/dawn/", rpf);
-testServer.addHandler(fh);
+fh.addPath("/", rpf);
+testServer.addHandler("/", fh);
 testServer.run();
