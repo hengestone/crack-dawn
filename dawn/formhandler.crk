@@ -49,12 +49,13 @@ class FormHandler : SCGIRequestHandler {
     bool _handleForm(SCGIRequest req, String data) {
       try {
         int id;
-        fields := FormFields(data);
         fp := _paths.get(req.inHeaders['PATH_INFO'], null);
         if (!(fp is null))
-          fp(req, fields);
-        else
-          req.sendReply(404, "text/plain", sfmt `No form handler registered for path $(req.inHeaders['PATH_INFO'])`);
+          fp(req, FormFields(data));
+        else {
+          _logger.debug(sfmt `No form handler registered for path $(req.inHeaders['PATH_INFO'])`);
+          return false;
+        }
       }
       catch (Exception ex) {
         _logger.error(FStr() `Error processing request: $(ex.text). Data was\n$(req.data)`);
@@ -72,7 +73,7 @@ class FormHandler : SCGIRequestHandler {
         return true;
       }
         
-      return _handleForm(req, d);
+      return _handleForm(req, String(d));
     }
 
     bool onPut(SCGIRequest req) {

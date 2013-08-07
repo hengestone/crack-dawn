@@ -27,12 +27,13 @@ INSTALLDIR=${PREFIX}/lib/crack-${VERSION}/dawn
 all: bin/crack_scgi dawn/user.crk
 
 tests: test/test_echo test/test_scgi test/test_user test/test_user_c \
-       test/test_shorten test/test_form
+       test/test_shorten test/test_form test/test_dirtree
 
 test/test_scgi: test/test_scgi.crk $(libs)
 test/test_echo: test/test_shorten.crk test/shorten.crk test/shortener.crk \
                  $(libs)
 test/test_echo: test/test_echo.crk $(libs)
+test/test_dirtree: test/test_dirtree.crk $(libs)
 test/test_form: test/test_form.crk
 test/test_user: interfaces/user.whipdl \
                  test/test_user.crk dawn/user.crk \

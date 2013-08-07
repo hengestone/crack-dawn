@@ -18,10 +18,10 @@ import crack.cont.list List;
 import crack.functor Functor1;
 import crack.io cerr, StandardFormatter, StringFormatter, Writer, FileHandle,
                       FStr;
-import crack.lang SystemError, InvalidStateError;
+import crack.lang SystemError, InvalidStateError, AssertionError;
 import crack.logger DEBUG, INFO, WARN, ERROR, FATAL, Logger, LogFormatter;
 import crack.net InetAddress, UnixAddress, Poller, Socket, AF_UNIX, POLLIN,
-                 POLLOUT, POLLERR, SOCK_STREAM;;
+                 POLLOUT, POLLERR, SOCK_STREAM;
 import crack.runtime errno, fileExists, fileRemove, EAGAIN, EWOULDBLOCK;
 import crack.strutil StringArray;
 import crack.sys strerror;
@@ -204,6 +204,66 @@ class Error : StringFormatter {
     @abstract bool onPost(SCGIRequest req);
     @abstract bool oper call(SCGIRequest req);
 }
+
+class DirTree;
+
+class DirTree {
+    String name; // Root of the tree should have an empty string as a name
+    SCGIRequestHandler handler;
+    uint _level;
+    
+    HashMap[String, DirTree] tree;
+
+    oper init(String name, SCGIRequestHandler handler, uint l) :
+        name=name, handler=handler, tree=HashMap[String, DirTree](), _level=l {
+    }
+
+    SCGIRequestHandler get(String n) {
+        t := tree.get(n, null);
+        if (t is null) return null;
+        return t.handler;
+    }
+
+    SCGIRequestHandler oper[](String n)  {
+        return get(n);
+    }
+
+    SCGIRequestHandler findHandler(StringArray paths, uint index) {
+        numPaths := paths.count();
+        if (paths is null || numPaths == 0 || index == paths.count())
+            return handler;                 // default handler
+
+        subTree := tree.get(paths[index], null);
+        if (subTree is null) return handler;
+        return subTree.findHandler(paths, index+1);
+    }
+
+    bool addHandler(StringArray paths, uint index, SCGIRequestHandler h) {
+        if (index == 0 && paths[index].size == 0) index++;
+        newName := paths[index];
+        subTree := tree.get(newName, null);
+        if (subTree is null) { // Add a new tree
+            subTree = DirTree(newName, null, _level+1);
+            tree[newName] = subTree;
+        } 
+        if (index+1 == paths.count()) {
+            if (subTree.handler is null) {// handler exists
+                subTree.handler = h;
+                return true;
+            }
+            else return false;
+        }
+        else return subTree.addHandler(paths, index+1, h);
+    }
+
+    void formatTo(Formatter fmt) {
+        fmt `$("  "*_level)$name : $handler`;
+        if (tree.count() > 0) fmt.write("\n");
+        for (item :in tree)
+            fmt `$(item.val)\n`;
+    }
+}
+
 
 alias HandlerArray = Array[SCGIRequestHandler];
 
@@ -482,7 +542,7 @@ class SCGIServer {
     }
     
     void run() {
-        delay := TimeDelta(2,0); // wait 2 secs between iterations if no events
+        delay := TimeDelta(2, 0); // wait 2 secs between iterations if no events
         while (true) {
             processOnce(delay);
         }

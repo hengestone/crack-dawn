@@ -1,0 +1,22 @@
+import crack.logger Logger, DEBUG;
+import crack.io cerr, cout;
+import crack.strutil split;
+import dawn.scgi DirTree;
+import dawn.formhandler FormHandler;
+
+l := Logger(cerr, DEBUG);
+fh := FormHandler(l);
+path1 := "/qmct";
+path2 := "/qmct/text";
+path3 := "/qmct/text/file";
+path4 := "/qmct/text/file/txt";
+
+tree := DirTree("", fh, 0);
+tree.addHandler(split(path1, "/"), 1, fh);
+tree.addHandler(split(path2, "/"), 1, fh);
+cout `tree=\n$tree\n`;
+
+cout `find($path1) = $(tree.findHandler(split(path1, "/"), 1))\n`;
+cout `find($path2) = $(tree.findHandler(split(path2, "/"), 1))\n`;
+cout `find($path3) = $(tree.findHandler(split(path3, "/"), 1))\n`;
+cout `find($path4) = $(tree.findHandler(split(path4, "/"), 1))\n`;
