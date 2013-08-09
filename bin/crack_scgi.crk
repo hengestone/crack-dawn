@@ -1,12 +1,14 @@
 import crack.cmdline CmdOptions, Option, CMD_STR, CMD_INT, CMD_FLOAT, CMD_BOOL;
 import crack.logger DEBUG, INFO;
-import crack.io FStr;
+import crack.io FStr, cout;
 import crack.lang Exception;
 import crack.runtime exit;
 import crack.sys argv;
+import crack.strutil split;
 import dawn.scgi SCGIServer;
 import dawn.jsonrpc JsonRpcHandler, JsonEcho;
 import dawn.formhandler FormHandler, FormPath, FormEcho;
+import dawn.filehandler SimpleFileHandler;
 import test.shortener ShortenerHandler;
 
 CmdOptions options = [Option("help",   "h", "Show help message", "f", CMD_BOOL),
@@ -30,12 +32,22 @@ if (logfile.size > 0) l.setFile(options.getString("logfile"));
 #~ else l.setLevel(INFO);
 
 l.info("Starting SCGI server on socket "+options.getString("socket"));
-#~ rpc := JsonRpcHandler(l);
-#~ rpc.addMethod(JsonEcho());
-#~ testServer.addHandler(rpc);
-#~ rpc := ShortenerHandler("localhost", 27017, l);
-fh :=  FormHandler(l);
-rpf := FormEcho(l); // remote procedure form
-fh.addPath("/", rpf);
-testServer.addHandler("/", fh);
+
+rpc := JsonRpcHandler(l);  // Add JsonRpc handler
+rpc.addMethod(JsonEcho()); // Add method
+testServer.addHandler("/rpc2", rpc);
+
+formhandler :=  FormHandler(l);    // Add FormHandler
+rpf := FormEcho(l);                // Create form
+formhandler.addPath("/form", rpf); // Connect form to path
+testServer.addHandler("/form", formhandler); // Add formHandler to path
+
+// Create FileHandler, use website default docroot
+filehandler := SimpleFileHandler(null, l);
+testServer.addHandler("/", filehandler);   // Connect 
+
+// Start server main loop
 testServer.run();
+#~ path := "/form/etc";
+#~ tree := testServer.getHandlers();
+#~ cout `find($path) = $(tree.findHandler(split(path, "/"), 1))\n`; 

@@ -374,7 +374,7 @@ class SCGIServer {
 
             # Iterate through request handlers
             if (handlers) {
-                handler := handlers.findHandler(split(headers["PATH_INFO"], "/"), 1);
+                handler := handlers.findHandler(split(headers["SCRIPT_URL"], "/"), 1);
                 _logger.debug(sfmt `Found handler $handler`);
                 if (handler && handler(request)) {
                     request.doneProcessing = true;
@@ -384,7 +384,7 @@ class SCGIServer {
 
             if (!request.doneProcessing) {
                 _logger.debug("No handler found, returning headers");
-                request.sendReply(200, "text/plain", sfmt `$headers`);
+                request.sendReply(404, "text/plain", sfmt `$(headers["REQUEST_URI"]) not found`);
                 _logger.debug(sfmt `sent reply to $sock`);
                 request.doneProcessing = true;
             }
@@ -554,6 +554,10 @@ class SCGIServer {
             __clients.delete(p);
             p.close();
         }
+    }
+
+    DirTree getHandlers() {
+        return __handlers;
     }
     
     void run() {

@@ -49,11 +49,11 @@ class FormHandler : SCGIRequestHandler {
     bool _handleForm(SCGIRequest req, String data) {
       try {
         int id;
-        fp := _paths.get(req.inHeaders['PATH_INFO'], null);
+        fp := _paths.get(req.inHeaders['SCRIPT_URL'], null);
         if (!(fp is null))
           fp(req, FormFields(data));
         else {
-          _logger.debug(sfmt `No form handler registered for path $(req.inHeaders['PATH_INFO'])`);
+          _logger.debug(sfmt `No form handler registered for path $(req.inHeaders['SCRIPT_URL'])`);
           return false;
         }
       }

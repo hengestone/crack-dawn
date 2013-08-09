@@ -23,7 +23,7 @@ form["test"] = "SOme !very&scary**st^ff";
 form["another"] = "You want more!";
 
 msg := form.encoded();
-url := "http://localhost/dawn/";
+url := "http://localhost/form";
 ch := CurlEasy(url);
 ch.setOpt(CURLOPT_POST, 1);
 ch.setOpt(CURLOPT_VERBOSE, 1);
