@@ -1,0 +1,90 @@
+import crack.cont.hashmap HashMap, OrderedHashMap;
+import crack.enc.json JsonParser, JsonStringFormatter, ParseException,
+                      JsonObject, JsonString, JsonInt, JsonArray;
+import crack.io cerr, FStr, StringFormatter, Formatter;
+import crack.lang Buffer, ManagedBuffer, Exception, CString;
+import crack.logger Logger;
+import crack.net.curl UrlEncode, UrlDecode;
+import crack.strutil split;
+import crack.sys strerror;
+import crack.runtime stat, Stat, free, S_IFDIR, S_IFREG, errno;
+import dawn.scgi SCGIRequestHandler, Error, SCGIRequest;
+
+sfmt := FStr();
+
+class SimpleFileHandler : SCGIRequestHandler {
+    String _prefix;
+    Logger _logger;
+
+    // Supply our own prefix
+    oper init (String p, Logger l) : _prefix=p, _logger=l {
+      if (!(_prefix is null) && _prefix[-1] != b"/")
+        _prefix += "/";
+    }
+
+    oper init (Logger l) : _prefix=null, _logger=l {
+    }
+
+    String prefix() {
+      return _prefix;
+    }
+
+    bool onGet(SCGIRequest req) {
+      localPath := req.inHeaders.get('DOCUMENT_ROOT', null);
+      _logger.debug(sfmt `localPath=$localPath`);
+      fname := (_prefix is null && !(localPath is null) ? localPath :
+                _prefix) + req.inHeaders['SCRIPT_URL'];
+      _logger.debug(sfmt `fname=$fname`);
+
+      // Now check file name
+      Stat st = {};
+      rc := stat(CString(fname).buffer, st);
+      if (rc) {
+        _logger.info(sfmt `Error stat'ing $fname: $(strerror()) ($(errno()))`);
+        req.sendReply(404, "text/plain", sfmt `Error: $(req.inHeaders['SCRIPT_URL']) not found`);
+        free(st);
+        return true;
+      }
+      
+      isFile := !rc && st.st_mode & S_IFREG;
+      isDir := !rc && st.st_mode & S_IFDIR;
+
+      if (isDir) {
+        fname += "index.html";
+        rc = stat(CString(fname).buffer, st);
+        isFile = !rc && st.st_mode & S_IFREG;
+        if (rc || !isFile) {
+          if (rc)
+            _logger.info(sfmt `Error stat'ing $fname: $(strerror()) ($(errno()))`);
+          req.sendReply(404, "text/plain", sfmt `Error: $(req.inHeaders['SCRIPT_URL']) not found`);
+          free(st);
+          return true;
+        }
+      }
+
+      req.outHeaders['X-Sendfile'] = fname;
+      req.sendReply(200, "", "");
+      free(st);
+      return true;
+    }
+
+    bool onPut(SCGIRequest req) {
+        return false;
+    }
+
+    bool onPost(SCGIRequest req) {
+      return false;
+    }
+
+    bool oper call(SCGIRequest req) {
+        return onGet(req);
+    }
+
+    void formatTo(Formatter fmt) {
+      fmt.write("FileHandler(");
+      if (!(_prefix is null))
+        fmt.write(_prefix);
+      fmt.write(")");
+    }
+
+}
