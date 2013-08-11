@@ -29,18 +29,14 @@ class SimpleFileHandler : SCGIRequestHandler {
       return _prefix;
     }
 
-    bool onGet(SCGIRequest req) {
-      localPath := req.inHeaders.get('DOCUMENT_ROOT', null);
-      _logger.debug(sfmt `localPath=$localPath`);
-      fname := (_prefix is null && !(localPath is null) ? localPath :
-                _prefix) + req.inHeaders['SCRIPT_URL'];
-      _logger.debug(sfmt `fname=$fname`);
-
-      // Now check file name
+    @static
+    bool sendFile(SCGIRequest req, String infname, String default, Logger l) {
+      // Check file name
+      fname := String(infname);
       Stat st = {};
       rc := stat(CString(fname).buffer, st);
       if (rc) {
-        _logger.info(sfmt `Error stat'ing $fname: $(strerror()) ($(errno()))`);
+        l.info(sfmt `Error stat'ing $fname: $(strerror()) ($(errno()))`);
         req.sendReply(404, "text/plain", sfmt `Error: $(req.inHeaders['SCRIPT_URL']) not found`);
         free(st);
         return true;
@@ -50,21 +46,33 @@ class SimpleFileHandler : SCGIRequestHandler {
       isDir := !rc && st.st_mode & S_IFDIR;
 
       if (isDir) {
-        fname += "index.html";
+        fname += default;
         rc = stat(CString(fname).buffer, st);
         isFile = !rc && st.st_mode & S_IFREG;
         if (rc || !isFile) {
           if (rc)
-            _logger.info(sfmt `Error stat'ing $fname: $(strerror()) ($(errno()))`);
-          req.sendReply(404, "text/plain", sfmt `Error: $(req.inHeaders['SCRIPT_URL']) not found`);
+            l.info(sfmt `Error stat'ing $fname: $(strerror()) ($(errno()))`);
           free(st);
-          return true;
+          return false;
         }
       }
 
       req.outHeaders['X-Sendfile'] = fname;
       req.sendReply(200, "", "");
       free(st);
+      return true;
+    }
+
+    bool onGet(SCGIRequest req) {
+      localPath := req.inHeaders.get('DOCUMENT_ROOT', null);
+      _logger.debug(sfmt `localPath=$localPath`);
+      fname := (_prefix is null && !(localPath is null) ? localPath :
+                _prefix) + req.inHeaders['SCRIPT_URL'];
+      _logger.debug(sfmt `fname=$fname`);
+
+   
+      if (!sendFile(req, fname, "index.html", _logger)
+        req.sendReply(404, "text/plain", sfmt `Error: $(req.inHeaders['SCRIPT_URL']) not found`);
       return true;
     }
 

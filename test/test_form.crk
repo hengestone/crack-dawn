@@ -19,7 +19,7 @@ uintz write_callback(byteptr data, uintz size, uintz nmemb, AppendBuffer buf){
 }
 
 form := FormData();
-form["test"] = "SOme !very&scary**st^ff";
+form["test"] = "SOme !very scary**st^ff";
 form["another"] = "You want more!";
 
 msg := form.encoded();
