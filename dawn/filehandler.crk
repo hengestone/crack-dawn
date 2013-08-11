@@ -71,7 +71,7 @@ class SimpleFileHandler : SCGIRequestHandler {
       _logger.debug(sfmt `fname=$fname`);
 
    
-      if (!sendFile(req, fname, "index.html", _logger)
+      if (!sendFile(req, fname, "index.html", _logger))
         req.sendReply(404, "text/plain", sfmt `Error: $(req.inHeaders['SCRIPT_URL']) not found`);
       return true;
     }
