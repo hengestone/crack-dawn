@@ -15,6 +15,7 @@ sfmt := FStr();
 class SimpleFileHandler : SCGIRequestHandler {
     String _prefix;
     Logger _logger;
+    HashMap[String, String] _defaultHeaders = {};
 
     // Supply our own prefix
     oper init (String p, Logger l) : _prefix=p, _logger=l {
@@ -29,8 +30,13 @@ class SimpleFileHandler : SCGIRequestHandler {
       return _prefix;
     }
 
+    void setHeader(String key, String value) {
+      _defaultHeaders[key] = value;
+    }
+
     @static
-    bool sendFile(SCGIRequest req, String infname, String default, Logger l) {
+    bool sendFile(SCGIRequest req, String infname, String default, Logger l,
+                  HashMap[String, String] headers) {
       // Check file name
       fname := String(infname);
       Stat st = {};
@@ -57,6 +63,9 @@ class SimpleFileHandler : SCGIRequestHandler {
         }
       }
 
+      for (item :in headers)
+        req.outHeaders[item.key] = item.val;
+
       req.outHeaders['X-Sendfile'] = fname;
       req.sendReply(200, "", "");
       free(st);
@@ -71,7 +80,7 @@ class SimpleFileHandler : SCGIRequestHandler {
       _logger.debug(sfmt `fname=$fname`);
 
    
-      if (!sendFile(req, fname, "index.html", _logger))
+      if (!sendFile(req, fname, "index.html", _logger, _defaultHeaders))
         req.sendReply(404, "text/plain", sfmt `Error: $(req.inHeaders['SCRIPT_URL']) not found`);
       return true;
     }
@@ -94,5 +103,4 @@ class SimpleFileHandler : SCGIRequestHandler {
         fmt.write(_prefix);
       fmt.write(")");
     }
-
 }

@@ -1,3 +1,4 @@
+import crack.cont.hashmap HashMap;
 import crack.cmdline CmdOptions, Option, CMD_STR, CMD_INT, CMD_FLOAT, CMD_BOOL;
 import crack.logger DEBUG, INFO;
 import crack.io FStr, cout;
@@ -14,6 +15,7 @@ import test.shortener ShortenerHandler;
 CmdOptions options = [Option("help",   "h", "Show help message", "f", CMD_BOOL),
                       Option("socket", "s", "Socket path", "/tmp/crack_scgi.socket", CMD_STR),
                       Option("logfile", "l", "Log file", "", CMD_STR),
+                      Option("headers", "s", "Headers", "", CMD_STR),
                       Option("debug", "d", "Set log level to debug", "f", CMD_BOOL)];
 
 options.parse(argv, false);
@@ -31,6 +33,16 @@ if (logfile.size > 0) l.setFile(options.getString("logfile"));
   l.setLevel(DEBUG);
 #~ else l.setLevel(INFO);
 
+headerSpec := options.getString("headers");
+headers := HashMap[String, String]();
+if (headerSpec.size > 0) {
+  ha := split(headerSpec,",");
+  for (item :in ha) {
+    keyval := split(item,":");
+    headers[keyval[0]] = keyval[1];
+  }
+}
+
 l.info("Starting SCGI server on socket "+options.getString("socket"));
 
 rpc := JsonRpcHandler(l);  // Add JsonRpc handler
@@ -44,7 +56,10 @@ testServer.addHandler("/form", formhandler); // Add formHandler to path
 
 // Create FileHandler, use website default docroot
 filehandler := SimpleFileHandler(null, l);
-testServer.addHandler("/", filehandler);   // Connect 
+for (item :in headers)
+  filehandler.setHeader(item.key, item.val);
+
+testServer.addHandler("/", filehandler);   // Connect
 
 // Start server main loop
 testServer.run();

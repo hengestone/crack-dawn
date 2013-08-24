@@ -9,25 +9,26 @@
 ##   file, You can obtain one at http://mozilla.org/MPL/2.0/.
 ## 
 
-import crack.lang AppendBuffer, Buffer, ManagedBuffer, WriteBuffer,
-                  Exception, KeyError;
 import crack.ascii strip, escape;
 import crack.cont.array Array;
 import crack.cont.hashmap HashMap, OrderedHashMap;
 import crack.cont.list List;
-import crack.functor Functor1;
+import crack.functor Functor1, Functor2;
 import crack.io cerr, StandardFormatter, StringFormatter, Writer, FileHandle,
-                      FStr, Formatter;
+                FStr, Formatter;
+import crack.lang AppendBuffer, Buffer, ManagedBuffer, WriteBuffer, Exception,
+                  KeyError;
 import crack.lang SystemError, InvalidStateError, AssertionError;
 import crack.logger DEBUG, INFO, WARN, ERROR, FATAL, Logger, LogFormatter;
-import crack.net InetAddress, UnixAddress, Poller, Socket, AF_UNIX, POLLIN,
-                 POLLOUT, POLLERR, SOCK_STREAM;
+import crack.net InetAddress, UnixAddress, Poller, Socket, AF_UNIX, PollEvent,
+                 POLLIN, POLLOUT, POLLERR, POLLHUP, SOCK_STREAM;
 import crack.runtime errno, fileExists, fileRemove, EAGAIN, EWOULDBLOCK;
 import crack.strutil StringArray, split;
 import crack.sys strerror;
 import crack.time TimeDelta;
 
 @import crack.ann define, interface, implements;
+alias PollEventCallback = Functor2[int, Poller, PollEvent];
 
 StandardFormatter NULL_FORMATTER = null;
 sfmt := FStr();
@@ -441,6 +442,7 @@ class SCGIServer {
     int __port;
     Socket __sock = {AF_UNIX, SOCK_STREAM, 0};
     HashMap[FileHandle, Client] __clients = {};
+    HashMap[FileHandle, PollEventCallback] __callbacks = {};
     Poller __poller = {};
     List[FileHandle] __toRemove = {};
     DirTree __handlers;
@@ -483,6 +485,15 @@ class SCGIServer {
         _logger.debug(sfmt `clients=$__clients`);
     }
     
+    void __acceptUserSock(PollEventCallback cb) {
+        clientAccepted := __sock.accept();
+        _debug I`  got connection from $(clientAccepted.addr) with ref count 
+                  $(clientAccepted.sock.refCount) on $(clientAccepted.sock.fd)`;
+        __poller.add(clientAccepted.sock, POLLIN);
+        __callbacks[clientAccepted.sock] = cb;
+        _logger.debug(sfmt `callbacks=$__callbacks`);
+    }
+    
     void __processClientRead(FileHandle p) {
         client := __clients[p];
         if (!client.processInput())
@@ -510,38 +521,67 @@ class SCGIServer {
         else
             __handlers.addHandler(split(path, "/"), 1, handler);
     }
+
+    void addEventHandler(FileHandle p, PollEventCallback callback) {
+        __poller.add(p, callback);
+        __callbacks[p] = callback;
+    }
     
     ## Process a single event.
     ## If 'timeout' is not null, it is the timeout to wait for the next event.
     void processOnce(TimeDelta timeout) {
         # go through the clients, change their events
-        for (clientItem :in __clients)
+        for (clientItem :in __clients) {
             if (clientItem.val.outQueue)
-                __poller.setEvents(clientItem.val.sock, POLLIN | POLLOUT);
+                __poller.setEvents(clientItem.key, POLLIN | POLLOUT);
             else
-                __poller.setEvents(clientItem.val.sock, POLLIN);
-        
+                __poller.setEvents(clientItem.key, POLLIN);
+        }
+
+        for (cbItem :in __callbacks) {
+            __poller.setEvents(cbItem.key, POLLIN);
+        }
+
         result := __poller.wait(timeout);
+        uint userEvents = 0;
         while (evt := __poller.nx()) {
-            _debug `  event is on $(evt.pollable)`;
             # if it's the server socket, do an accept
             if (evt.pollable is __sock) {
                 _debug `  got new connection`;
-                __accept();
+                callback := __callbacks.get(evt.pollable, null);
+                if (callback)
+                    __acceptUserSock(callback);
+                else
+                    __accept();
             # client events
             } else {
-                if (POLLIN & evt.revents) {
-                    _debug `  got client read`;
-                    __processClientRead(evt.pollable);
-                    __processClientWrite(evt.pollable);
-                } else if (POLLOUT & evt.revents) {
-                    _debug `  got client writable`;
-                    __processClientWrite(evt.pollable);
-                } else if (POLLERR & evt.revents) {
-                    _error `  error on socket $(evt.pollable)`;
+                if (__clients.get(evt.pollable, null)) {
+                    if (POLLIN & evt.revents) {
+                        _debug `  got client read`;
+                        __processClientRead(evt.pollable);
+                        __processClientWrite(evt.pollable);
+                    } else if (POLLOUT & evt.revents) {
+                        _debug `  got client writable`;
+                        __processClientWrite(evt.pollable);
+                    } else if (POLLERR & evt.revents) {
+                        _error `  error on socket $(evt.pollable)`;
+                    } else if (POLLHUP & evt.revents) {
+                        _info `  socket $(evt.pollable) CLOSED`;
+                        __clients.delete(evt.pollable);
+                    } else {
+                        _error I`  wtf???  pollable = $(evt.pollable), events = 
+                                  $(evt.events), revents = $(evt.revents)`;
+                    }
                 } else {
-                    _error I`  wtf???  pollable = $(evt.pollable), events = 
-                              $(evt.events), revents = $(evt.revents)`;
+                    callback := __callbacks.get(evt.pollable, null);
+                    if (callback) {
+                        if (POLLHUP & evt.revents) {
+                            _info `  socket $(evt.pollable) CLOSED`;
+                            __callbacks.delete(evt.pollable);
+                        }// else __toRemove.append(evt.pollable);
+                        callback(__poller, evt); // Notify listener
+                        userEvents++;
+                    }
                 }
             }
         }
@@ -553,6 +593,11 @@ class SCGIServer {
             __poller.remove(p);
             __clients.delete(p);
             p.close();
+        }
+        if (!userEvents) {
+            PollEvent pe;
+            for (c :in __callbacks)
+                c.val(__poller, pe); // housekeeping
         }
     }
 
