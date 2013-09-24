@@ -7,20 +7,20 @@ import crack.cont.array Array;
 import crack.io FStr;
 import crack.runtime INT_SIZE;
 import whip.serializer Serializer, Materializer, Serializable;
-import crack.db.mongo_support Oid;
+import crack.db.mongo_support OID;
 FStr sfmt = {};
 
 //------------------------------------------------------------------------------
 class ShortUrl : Serializable {
   uint32 __id = 0xc6f03f9;
   uint32 getId() { return __id; }
-  Oid _id;
+  OID _id;
   String url = "";
   String short = "";
   oper init() { }
 
-  void set_id(Oid new_id) { _id = new_id }
-  Oid get_id() { return _id }
+  void set_id(OID new_id) { _id = new_id }
+  OID get_id() { return _id }
 
 
   void serialize(Serializer __sr, Buffer __name) {

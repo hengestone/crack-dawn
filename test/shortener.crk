@@ -1,14 +1,14 @@
 import crack.ascii escape, hex;
 import crack.db.mongo BSON, MONGO_CONN_LOCAL, MongoSync;
-import crack.enc.json JsonParser, JsonStringFormatter, ParseException,
-                      JsonObject, JsonString, JsonInt, JsonArray;
+import crack.enc.json JSONParser, JSONStringFormatter, ParseException,
+                      JSONObject, JSONString, JSONInt, JSONArray;
 import crack.hash.murmur3 Murmur3_32;
 import crack.io cerr, cout, FStr;
 import crack.lang CString, Buffer;
 import crack.logger Logger;
 import crack.runtime errno, exit;
 import crack.sys strerror;
-import dawn.jsonrpc JsonRpcHandler, JsonEcho, JsonMethod, JsonError;
+import dawn.jsonrpc JSONRpcHandler, JSONEcho, JSONMethod, JSONError;
 import dawn.scgi SCGIRequestHandler, Error, SCGIRequest;
 import test.shorten ShortUrl;
 import whip.bson_serializer BSONBufferSerializer, BSONBufferMaterializer;
@@ -16,7 +16,7 @@ import whip.json_serializer JSONBufferSerializer, JSONBufferMaterializer;
 
 CString ns = "dawn.shorten";
 
-class JsonShortener : JsonMethod {
+class JSONShortener : JSONMethod {
   BSON _query;
   MongoSync _conn;
   Logger _logger;
@@ -29,25 +29,25 @@ class JsonShortener : JsonMethod {
   }
 
   // Receive request object that is a valid jsonrpc 2 request with our method name
-  JsonObject exec(SCGIRequest req, JsonObject rpc) {
+  JSONObject exec(SCGIRequest req, JSONObject rpc) {
     done = false;
     params := rpc["params"];
     rpc.deleteKey("method"); // re-using Request object for the reply
     rpc.deleteKey("params");
     
-    JsonString url = null;
+    JSONString url = null;
     ShortUrl record = null;
 
-    if (params.isa(JsonString))
-      url = JsonString.cast(params);
-    else if (params.isa(JsonArray)) {
-      A := JsonArray.cast(params);
-      if (A.count() > 0 && A[0].isa(JsonString))
-        url = JsonString.cast(A[0]);
+    if (params.isa(JSONString))
+      url = JSONString.cast(params);
+    else if (params.isa(JSONArray)) {
+      A := JSONArray.cast(params);
+      if (A.count() > 0 && A[0].isa(JSONString))
+        url = JSONString.cast(A[0]);
     }
 
     if (url is null) {
-      JsonError(req, 400, "-1") `$name method takes one string argument`;
+      JSONError(req, 400, "-1") `$name method takes one string argument`;
       done = true;
     } else {
       _query = BSON();
@@ -77,7 +77,7 @@ class JsonShortener : JsonMethod {
     }
 
     if (!done && !(record is null)) {
-      res := JsonObject();
+      res := JSONObject();
       res["url"] = record.url;
       res["short"] = record.short;
       rpc["result"] = res;
@@ -88,18 +88,18 @@ class JsonShortener : JsonMethod {
 
 
 // An url shortener JSONRPC service 
-class ShortenerHandler : JsonRpcHandler {
+class ShortenerHandler : JSONRpcHandler {
   BSON _query;
   MongoSync _conn;
   ShortUrl _record;
   Buffer _short;
 
-  oper init(String host, int port, Logger l) : JsonRpcHandler(l) {
+  oper init(String host, int port, Logger l) : JSONRpcHandler(l) {
     // Connect to localhost over TCP/IP
     _conn = MongoSync("localhost", 27017, true);
     _conn.setAutoReconnect(true);
-    addMethod(JsonEcho());
-    addMethod(JsonShortener(_conn, l));
+    addMethod(JSONEcho());
+    addMethod(JSONShortener(_conn, l));
   }
 
   bool onGet(SCGIRequest req) {

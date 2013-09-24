@@ -1,10 +1,7 @@
 import crack.cont.hashmap HashMap, OrderedHashMap;
-import crack.enc.json JsonParser, JsonStringFormatter, ParseException,
-                      JsonObject, JsonString, JsonInt, JsonArray;
 import crack.io cerr, FStr, StringFormatter, Formatter;
 import crack.lang Buffer, ManagedBuffer, Exception, CString;
 import crack.logger Logger;
-import crack.net.curl UrlEncode, UrlDecode;
 import crack.strutil split;
 import crack.sys strerror;
 import crack.runtime stat, Stat, free, S_IFDIR, S_IFREG, errno;

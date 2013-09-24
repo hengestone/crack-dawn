@@ -7,7 +7,7 @@ import crack.cont.array Array;
 import crack.io FStr;
 import crack.runtime INT_SIZE;
 import whip.serializer Serializer, Materializer, Serializable;
-import crack.db.mongo_support Oid;
+import crack.db.mongo_support OID;
 FStr sfmt = {};
 
 //------------------------------------------------------------------------------
@@ -176,7 +176,7 @@ class Session : Serializable {
 class User : Serializable {
   uint32 __id = 0x659533e0;
   uint32 getId() { return __id; }
-  Oid _id;
+  OID _id;
   String __uuid = "";
   String short = "";
   String first = "";

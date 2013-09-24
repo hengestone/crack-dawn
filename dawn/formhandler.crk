@@ -1,10 +1,10 @@
 import crack.cont.hashmap HashMap, OrderedHashMap;
-import crack.enc.json JsonParser, JsonStringFormatter, ParseException,
-                      JsonObject, JsonString, JsonInt, JsonArray;
+import crack.enc.json JSONParser, JSONStringFormatter, ParseException,
+                      JSONObject, JSONString, JSONInt, JSONArray;
 import crack.io cerr, FStr, StringFormatter, Formatter;
 import crack.lang Buffer, ManagedBuffer, Exception;
 import crack.logger Logger;
-import crack.net.curl UrlEncode, UrlDecode;
+import crack.net.curl URLEncode, URLDecode;
 import crack.strutil split;
 import dawn.scgi SCGIRequestHandler, Error, SCGIRequest;
 
@@ -12,7 +12,7 @@ sfmt := FStr();
 
 class FormFields : OrderedHashMap[String, String] {
   oper init(String forminput) : OrderedHashMap[String, String]() {
-    decoded := UrlDecode(forminput);
+    decoded := URLDecode(forminput);
     items := split(decoded, "&");
     for (item :in items) {
       pair := split(item, "=");

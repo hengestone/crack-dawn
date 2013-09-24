@@ -5,17 +5,17 @@ import crack.runtime errno, exit;
 import crack.sys strerror;
 import whip.bson_serializer BSONBufferSerializer, BSONBufferMaterializer;
 import whip.json_serializer JSONBufferSerializer, JSONBufferMaterializer;
-import dawn.jsonrpc JsonRpcHandler, JsonEcho;
+import dawn.jsonrpc JSONRpcHandler, JSONEcho;
 
 // An url shortener JSONRPC service 
-class ShortenerHandler : JsonRpcHandler {
+class ShortenerHandler : JSONRpcHandler {
   MongoSync _conn;
 
   oper init(String host, int port) {
     // Connect to localhost over TCP/IP
     _conn = MongoSync("localhost", 27017, true);
     _conn.setAutoReconnect(true);
-    addMethod(JsonEcho());
+    addMethod(JSONEcho());
   }
 }
 

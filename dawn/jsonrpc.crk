@@ -1,6 +1,6 @@
 import crack.cont.hashmap HashMap;
-import crack.enc.json JsonParser, JsonStringFormatter, ParseException,
-                      JsonObject, JsonString, JsonInt, JsonArray;
+import crack.enc.json JSONParser, JSONStringFormatter, ParseException,
+                      JSONObject, JSONString, JSONInt, JSONArray;
 import crack.io cerr, FStr, StringFormatter, Formatter;
 import crack.lang Buffer, Exception;
 import crack.logger Logger;
@@ -8,7 +8,7 @@ import dawn.scgi SCGIRequestHandler, Error, SCGIRequest;
 
 // JSON Error formatter.  Returns a simple JSONRPC message to the client
 // error reply with the message as its parcel.
-class JsonError : StringFormatter {
+class JSONError : StringFormatter {
     SCGIRequest req;
     int code;
     Buffer id;
@@ -22,15 +22,15 @@ class JsonError : StringFormatter {
     }
 }
 
-@abstract class JsonMethod {
+@abstract class JSONMethod {
   String name;
   int code;
   Buffer type;
   bool done;
-  @abstract JsonObject exec(SCGIRequest req, JsonObject rpc);
+  @abstract JSONObject exec(SCGIRequest req, JSONObject rpc);
 }
 
-class JsonEcho : JsonMethod {
+class JSONEcho : JSONMethod {
   oper init() {
      name = "echo";
      type = "text/json";
@@ -39,7 +39,7 @@ class JsonEcho : JsonMethod {
   }
 
   // Receive request object that is a valid jsonrpc 2 request with our method name
-  JsonObject exec(SCGIRequest req, JsonObject rpc) {
+  JSONObject exec(SCGIRequest req, JSONObject rpc) {
     params := rpc["params"];
     rpc.deleteKey("method");
     rpc.deleteKey("params");
@@ -48,20 +48,20 @@ class JsonEcho : JsonMethod {
   }
 }
 
-class JsonRpcHandler : SCGIRequestHandler {
-    JsonParser _parser = {};
-    JsonStringFormatter _jfmt = {};
-    HashMap[Buffer, JsonMethod] _methods = {};
+class JSONRpcHandler : SCGIRequestHandler {
+    JSONParser _parser = {};
+    JSONStringFormatter _jfmt = {};
+    HashMap[Buffer, JSONMethod] _methods = {};
     Logger _logger;
 
     oper init (Logger l) : _logger=l {
     }
 
-    void addMethod(JsonMethod m) {
+    void addMethod(JSONMethod m) {
       _methods[m.name] = m;
     }
 
-    HashMap[Buffer, JsonMethod] getMethods() {
+    HashMap[Buffer, JSONMethod] getMethods() {
       return _methods;
     }
     
@@ -74,7 +74,7 @@ class JsonRpcHandler : SCGIRequestHandler {
     }
 
     // Validate request structure
-    bool _validRequest(JsonObject rpc) {
+    bool _validRequest(JSONObject rpc) {
       if (rpc.get("method", null) is null ||
           rpc.get("params", null) is null ||
           rpc.get("id", null) is null) return false;
@@ -82,30 +82,31 @@ class JsonRpcHandler : SCGIRequestHandler {
     }
     
     bool onPost(SCGIRequest req) {
-      JsonMethod mt = null;
-      JsonObject result;
-      _logger.debug("JsonRpcHandler Processing POST request");
+      JSONMethod mt = null;
+      JSONObject result;
+      _logger.debug("JSONRpcHandler Processing POST request");
       String method = null;
 
       try {
-        JsonObject result;
+        JSONObject result;
         int id;
         parseVal := _parser.parse(req.data);
-        if (parseVal.result && parseVal.result.isa(JsonObject)) {
+        if (parseVal.result && parseVal.result.isa(JSONObject)) {
           _logger.debug("Parsed JSON OK");
-          jo := JsonObject.cast(parseVal.result);
+          jo := JSONObject.cast(parseVal.result);
           jmethod := jo.get("method", null);
-          if (jmethod.isa(JsonString)) {
-            method = String.cast(jmethod);
-            mt = _methods.get(JsonString.cast(jmethod), null);
+          if (jmethod.isa(JSONString)) {
+            jmt := JSONString.cast(jmethod);
+            mt = _methods.get(jmt, null);
+            method = String(jmt);
           }
           params := jo.get("params", null);
           id := jo.get("id", null);
-          if (method is null || params is null || id is null) {
-            JsonError(req, 400, "-1")
+          if (mt is null || params is null || id is null) {
+            JSONError(req, 400, "-1")
               `Invalid JSONRPC request, need 'method', 'params' and 'id'`;
           } else if (mt is null) {
-            JsonError(req, 405, "-1") `Unknown method $method`;
+            JSONError(req, 405, "-1") `Unknown method $method`;
           }
           else {
             _jfmt.format(jo);
@@ -120,13 +121,13 @@ class JsonRpcHandler : SCGIRequestHandler {
         else throw ParseException("Toplevel structure must be a JSON Object", 1, 1);
       } catch (ParseException px) {
         _logger.info("Error2");
-        JsonError(req, 400, "-1") `Error parsing JSONRPC request: $px`;
+        JSONError(req, 400, "-1") `Error parsing JSONRPC request: $px`;
       }
       catch (Exception ex) {
         _logger.error(FStr() `Error processing request: $(ex.text). Data was\n$(req.data)`);
-        JsonError(req, 400, "-1") `Error processing request: $(ex.text)`;
+        JSONError(req, 400, "-1") `Error processing request: $(ex.text)`;
       }
-      _logger.debug("JsonRpcHandler DONE Processing POST request");
+      _logger.debug("JSONRpcHandler DONE Processing POST request");
       return true;
     }
 
@@ -141,7 +142,7 @@ class JsonRpcHandler : SCGIRequestHandler {
     }
 
     void formatTo(Formatter fmt) {
-      fmt.write("JsonRpcHandler(");
+      fmt.write("JSONRpcHandler(");
       bool first = true;
       for (item :in _methods) {
         if (first) first = false;
@@ -152,9 +153,9 @@ class JsonRpcHandler : SCGIRequestHandler {
     }
 }
 
-#~ class JsonGetMethods : JsonMethod {
-#~   JsonRpcHandler _handler;
-#~   oper init(JsonRpcHandler h) : _handler = h {
+#~ class JSONGetMethods : JSONMethod {
+#~   JSONRpcHandler _handler;
+#~   oper init(JSONRpcHandler h) : _handler = h {
 #~      name = "methods";
 #~      type = "text/json";
 #~      code = 200;
@@ -162,13 +163,13 @@ class JsonRpcHandler : SCGIRequestHandler {
 #~   }
 #~ 
 #~   // Receive request object that is a valid jsonrpc 2 request with our method name
-#~   JsonObject exec(SCGIRequest req, JsonObject rpc) {
+#~   JSONObject exec(SCGIRequest req, JSONObject rpc) {
 #~     params := rpc["params"];
 #~     rpc.deleteKey("method");
 #~     rpc.deleteKey("params");
-#~     res := JsonArray();
+#~     res := JSONArray();
 #~     for (item :in _handler.getMethods())
-#~       JsonArray.append(JsonString(item.key));
+#~       JSONArray.append(JSONString(item.key));
 #~ 
 #~     rpc["result"] = res;
 #~     

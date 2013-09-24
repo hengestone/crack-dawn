@@ -7,7 +7,7 @@ import crack.runtime exit;
 import crack.sys argv;
 import crack.strutil split;
 import dawn.scgi SCGIServer;
-import dawn.jsonrpc JsonRpcHandler, JsonEcho;
+import dawn.jsonrpc JSONRpcHandler, JSONEcho;
 import dawn.formhandler FormHandler, FormPath, FormEcho;
 import dawn.filehandler SimpleFileHandler;
 import test.shortener ShortenerHandler;
@@ -45,8 +45,8 @@ if (headerSpec.size > 0) {
 
 l.info("Starting SCGI server on socket "+options.getString("socket"));
 
-rpc := JsonRpcHandler(l);  // Add JsonRpc handler
-rpc.addMethod(JsonEcho()); // Add method
+rpc := JSONRpcHandler(l);  // Add JSONRpc handler
+rpc.addMethod(JSONEcho()); // Add method
 testServer.addHandler("/rpc2", rpc);
 
 formhandler :=  FormHandler(l);    // Add FormHandler
